@@ -101,6 +101,7 @@
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="30"/>
                 </Grid.ColumnDefinitions>
@@ -124,6 +125,7 @@
                     <Button.ContextMenu>
                         <ContextMenu Name="BookmarkContextMenu">
                             <MenuItem Header="添加到收藏夹" Click="AddBookmark_Click"/>
+                            <MenuItem Header="open bookmark.json" Click="EditBookmarkJson_Click"/>
                             <Separator/>
                             <!-- 收藏夹项目将在这里动态添加 -->
                         </ContextMenu>
@@ -145,8 +147,13 @@
                         Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click"
                         ToolTip="放大"/>
                 
+                <!-- Popup按钮 -->
+                <Button Grid.Column="7" Name="PopupButton" Content="🔗" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click"
+                        ToolTip="在新标签页打开"/>
+                
                 <!-- 关闭按钮 -->
-                <Button Grid.Column="8" Name="CloseButton" Content="×" 
+                <Button Grid.Column="9" Name="CloseButton" Content="×" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="CloseButton_Click"/>
             </Grid>
         </Border>

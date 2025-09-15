@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -117,6 +118,27 @@ namespace TrayChrome
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             HideWithAnimation();
+        }
+
+        private void PopupButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string currentUrl = webView.CoreWebView2?.Source ?? AddressBar.Text;
+                if (!string.IsNullOrEmpty(currentUrl))
+                {
+                    // 在默认浏览器中打开当前页面（相当于_blank）
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = currentUrl,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开页面失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void BookmarkButton_Click(object sender, RoutedEventArgs e)
@@ -245,6 +267,9 @@ namespace TrayChrome
                     };
                     SaveBookmarks();
                 }
+                
+                // 加载收藏夹到菜单
+                RefreshBookmarkMenu();
             }
             catch (Exception ex)
             {
@@ -262,6 +287,36 @@ namespace TrayChrome
             catch (Exception ex)
             {
                 MessageBox.Show($"保存收藏夹失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void RefreshBookmarkMenu()
+        {
+            // 清除现有的收藏夹菜单项（保留"添加到收藏夹"和分隔符）
+            var itemsToRemove = BookmarkContextMenu.Items.Cast<object>().Skip(2).ToList();
+            foreach (var item in itemsToRemove)
+            {
+                BookmarkContextMenu.Items.Remove(item);
+            }
+            
+            // 添加所有收藏夹到菜单
+            foreach (var bookmark in bookmarks)
+            {
+                MenuItem bookmarkItem = new MenuItem
+                {
+                    Header = bookmark.Title,
+                    Tag = bookmark.Url,
+                    ToolTip = bookmark.Url
+                };
+                
+                bookmarkItem.Click += (s, args) => {
+                    if (bookmarkItem.Tag != null)
+                    {
+                        webView.CoreWebView2?.Navigate(bookmarkItem.Tag.ToString());
+                    }
+                };
+                
+                BookmarkContextMenu.Items.Add(bookmarkItem);
             }
         }
 
@@ -319,20 +374,54 @@ namespace TrayChrome
             
             if (!string.IsNullOrEmpty(currentUrl))
             {
-                // 创建收藏夹菜单项
-                MenuItem bookmarkItem = new MenuItem
+                // 检查是否已经存在相同的收藏夹
+                if (bookmarks.Any(b => b.Url.Equals(currentUrl, StringComparison.OrdinalIgnoreCase)))
                 {
-                    Header = title,
-                    Tag = currentUrl,
-                    ToolTip = currentUrl
+                    MessageBox.Show("该页面已经在收藏夹中了！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                
+                // 创建新的收藏夹对象
+                var newBookmark = new Bookmark
+                {
+                    Title = title,
+                    Url = currentUrl
                 };
                 
-                bookmarkItem.Click += (s, args) => {
-                    webView.CoreWebView2?.Navigate(bookmarkItem.Tag.ToString());
-                };
+                // 添加到收藏夹列表
+                bookmarks.Add(newBookmark);
                 
-                // 添加到右键菜单
-                BookmarkContextMenu.Items.Add(bookmarkItem);
+                // 实时保存到JSON文件
+                SaveBookmarks();
+                
+                // 刷新收藏夹菜单显示
+                RefreshBookmarkMenu();
+                
+                MessageBox.Show($"已添加到收藏夹：{title}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private void EditBookmarkJson_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 确保收藏夹文件存在
+                if (!File.Exists(bookmarksFilePath))
+                {
+                    SaveBookmarks(); // 创建文件
+                }
+                
+                // 使用VS Code打开收藏夹JSON文件
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "code",
+                    Arguments = $"\"{bookmarksFilePath}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开文件失败: {ex.Message}\n\n请确保已安装VS Code并添加到系统PATH中。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
