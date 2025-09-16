@@ -66,9 +66,9 @@
         <Border Grid.Row="0" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="35"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="35"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- 汉堡菜单按钮 -->
@@ -101,7 +101,7 @@
         <wv2:WebView2 Grid.Row="1" Name="webView" Source="https://www.google.com"/>
         
         <!-- 底部功能按钮栏 -->
-        <Border Grid.Row="2" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Name="BottomToolbar" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">
             <Grid Margin="5">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="30"/>
@@ -115,7 +115,7 @@
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="20"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- 后退按钮 -->
@@ -179,15 +179,13 @@
                         Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click"
                         ToolTip="放大"/>
                 
-                <!-- 窗口调整按钮 -->
-                <Label Grid.Column="11" Name="ResizeButton" Content="↘" 
+                <!-- 窗口调整按钮 ↘ -->
+                <Label Grid.Column="11" Name="ResizeButton" Content="" 
                        Background="Transparent" Foreground="White"
                        FontSize="16" Cursor="Hand"
                        HorizontalContentAlignment="Center"
                        VerticalContentAlignment="Center"
                        ToolTip="拖拽调整窗口大小"/>
-                
-
 
             </Grid>
         </Border>

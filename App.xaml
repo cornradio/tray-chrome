@@ -10,6 +10,13 @@
                         TrayMiddleMouseUp="TrayIcon_TrayMiddleMouseUp">
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
+                    <MenuItem Header="超级极简模式" Name="SuperMinimalModeMenuItem" Click="SuperMinimalMode_Click" IsCheckable="True" />
+                    <MenuItem Header="收藏夹" Name="BookmarksMenuItem">
+                        <MenuItem Header="添加到收藏夹" Click="AddBookmarkFromTray_Click"/>
+                        <MenuItem Header="编辑收藏夹" Click="EditBookmarkFromTray_Click"/>
+                        <Separator />
+                    </MenuItem>
+                    <Separator />
                     <MenuItem Header="增加实例" Click="AddInstance_Click" />
                     <MenuItem Header="重启实例" Click="RestartInstance_Click" />
                     <Separator />

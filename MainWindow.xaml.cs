@@ -43,6 +43,7 @@ namespace TrayChrome
         private Point resizeStartPoint;
         private bool isDarkMode = false;
         private bool isTopMost = true; // 默认置顶
+        private bool isSuperMinimalMode = false; // 超级极简模式状态
         
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
@@ -776,6 +777,38 @@ namespace TrayChrome
             
             return IntPtr.Zero;
         }
+        
+        public void ToggleSuperMinimalMode(bool enabled)
+        {
+            isSuperMinimalMode = enabled;
+            
+            if (enabled)
+            {
+                // 隐藏底部工具栏
+                BottomToolbar.Visibility = Visibility.Collapsed;
+                
+                // 让WebView2占用整个可用空间，将底部行高度设为0
+                var mainGrid = (Grid)BottomToolbar.Parent;
+                if (mainGrid != null && mainGrid.RowDefinitions.Count >= 3)
+                {
+                    mainGrid.RowDefinitions[2].Height = new GridLength(0);
+                }
+            }
+            else
+            {
+                // 显示底部工具栏
+                BottomToolbar.Visibility = Visibility.Visible;
+                
+                // 恢复底部工具栏的高度
+                var mainGrid = (Grid)BottomToolbar.Parent;
+                if (mainGrid != null && mainGrid.RowDefinitions.Count >= 3)
+                {
+                    mainGrid.RowDefinitions[2].Height = new GridLength(40);
+                }
+            }
+        }
+        
+        public bool IsSuperMinimalMode => isSuperMinimalMode;
     }
 
     public class Bookmark
