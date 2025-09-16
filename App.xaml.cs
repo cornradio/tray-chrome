@@ -19,12 +19,49 @@ namespace TrayChrome
         private List<Bookmark> bookmarks = new List<Bookmark>();
         private string bookmarksFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "bookmarks.json");
 
+        // 验证URL格式的辅助方法
+        private bool IsValidUrl(string url)
+        {
+            return Uri.TryCreate(url, UriKind.Absolute, out Uri? result) 
+                   && (result.Scheme == Uri.UriSchemeHttp || result.Scheme == Uri.UriSchemeHttps);
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
             // 分配实例ID
             currentInstanceId = ++instanceCounter;
+
+            // 解析命令行参数
+            string? startupUrl = null;
+            if (e.Args.Length > 0)
+            {
+                // 支持多种参数格式
+                for (int i = 0; i < e.Args.Length; i++)
+                {
+                    string arg = e.Args[i];
+                    
+                    // 支持 --url=https://example.com 格式
+                    if (arg.StartsWith("--url=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        startupUrl = arg.Substring(6);
+                        break;
+                    }
+                    // 支持 --url https://example.com 格式
+                    else if (arg.Equals("--url", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+                    {
+                        startupUrl = e.Args[i + 1];
+                        break;
+                    }
+                    // 支持直接传入URL（如果看起来像URL）
+                    else if (IsValidUrl(arg))
+                    {
+                        startupUrl = arg;
+                        break;
+                    }
+                }
+            }
 
             // 创建托盘图标
             trayIcon = (TaskbarIcon)FindResource("TrayIcon");
@@ -35,8 +72,8 @@ namespace TrayChrome
                 trayIcon.ToolTipText = $"Tray Chrome Browser - 实例 {currentInstanceId}";
             }
             
-            // 创建主窗口但不显示
-            mainWindow = new MainWindow();
+            // 创建主窗口但不显示，传入启动URL
+            mainWindow = new MainWindow(startupUrl);
             mainWindow.Hide();
             
             // 订阅标题变化事件

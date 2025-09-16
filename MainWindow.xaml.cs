@@ -48,11 +48,11 @@ namespace TrayChrome
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
 
-        public MainWindow()
+        public MainWindow(string? startupUrl = null)
         {
             InitializeComponent();
             LoadSettings();
-            InitializeWebView();
+            InitializeWebView(startupUrl);
             LoadBookmarks();
             SetupWindowAnimation();
             
@@ -95,7 +95,7 @@ namespace TrayChrome
             UpdateDarkModeButtonAppearance();
         }
 
-        private async void InitializeWebView()
+        private async void InitializeWebView(string? startupUrl = null)
         {
             try
             {
@@ -122,6 +122,13 @@ namespace TrayChrome
                 
                 // 拦截新窗口打开请求，在当前窗口中打开
                 webView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
+                
+                // 如果提供了启动URL，导航到该URL
+                if (!string.IsNullOrEmpty(startupUrl))
+                {
+                    webView.CoreWebView2.Navigate(startupUrl);
+                    AddressBar.Text = startupUrl;
+                }
             }
             catch (Exception ex)
             {
