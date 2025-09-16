@@ -48,13 +48,20 @@ namespace TrayChrome
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
 
-        public MainWindow(string? startupUrl = null, bool useCleanMode = false)
+        public MainWindow(string? startupUrl = null, bool useCleanMode = false, bool forceUncleanMode = false)
         {
             InitializeComponent();
             LoadSettings();
             
-            // 如果命令行指定了超级简洁模式，覆盖设置
-            if (useCleanMode)
+            // 处理超级极简模式设置的优先级：
+            // 1. 如果指定了 --unclean，强制禁用超级极简模式
+            // 2. 如果指定了 --clean，启用超级极简模式
+            // 3. 否则使用保存的设置
+            if (forceUncleanMode)
+            {
+                isSuperMinimalMode = false;
+            }
+            else if (useCleanMode)
             {
                 isSuperMinimalMode = true;
             }

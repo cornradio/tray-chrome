@@ -35,12 +35,23 @@ and you can have mutiple of it.
 | `--url <网址>` | 指定启动时加载的网页 | `--url "https://www.google.com"` |
 | `--open` | 启动时直接显示窗口 | `--open` |
 | `--clean` | 启用超级极简模式（隐藏工具栏） | `--clean` |
+| `--unclean` | 强制禁用超级极简模式 | `--unclean` |
+| `--help` 或 `-h` | 显示帮助信息 | `--help` |
 
 ### 使用示例
 
 ```bash
-# 启动极简模式jandan。net
+# 启动极简模式jandan.net
 .\TrayChrome.exe --url "https://jandan.net" --open --clean
+
+# 强制禁用极简模式启动
+.\TrayChrome.exe --unclean
+
+# 显示帮助信息
+.\TrayChrome.exe --help
+
+# 直接打开网页并显示窗口
+.\TrayChrome.exe --url "https://www.baidu.com" --open
 
 ```
 

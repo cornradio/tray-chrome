@@ -37,6 +37,8 @@ namespace TrayChrome
             string? startupUrl = null;
             bool shouldOpen = false; // 默认不直接显示窗口
             bool shouldUseCleanMode = false; // 默认不使用超级简洁模式
+            bool shouldForceUncleanMode = false; // 是否强制禁用超级极简模式
+            bool shouldShowHelp = false; // 是否显示帮助信息
             
             if (e.Args.Length > 0)
             {
@@ -61,10 +63,20 @@ namespace TrayChrome
                     {
                         shouldOpen = true;
                     }
-                    // 支持 --clean 格式
+                    // 支持 --clean 格式（启用超级极简模式）
                     else if (arg.Equals("--clean", StringComparison.OrdinalIgnoreCase))
                     {
                         shouldUseCleanMode = true;
+                    }
+                    // 支持 --unclean 格式（强制禁用超级极简模式）
+                    else if (arg.Equals("--unclean", StringComparison.OrdinalIgnoreCase))
+                    {
+                        shouldForceUncleanMode = true;
+                    }
+                    // 支持 --help 格式
+                    else if (arg.Equals("--help", StringComparison.OrdinalIgnoreCase) || arg.Equals("-h", StringComparison.OrdinalIgnoreCase))
+                    {
+                        shouldShowHelp = true;
                     }
                     // 支持直接传入URL（如果看起来像URL）
                     else if (IsValidUrl(arg))
@@ -72,6 +84,14 @@ namespace TrayChrome
                         startupUrl = arg;
                     }
                 }
+            }
+
+            // 如果需要显示帮助信息
+            if (shouldShowHelp)
+            {
+                ShowHelpMessage();
+                Shutdown();
+                return;
             }
 
             // 创建托盘图标
@@ -84,7 +104,7 @@ namespace TrayChrome
             }
             
             // 创建主窗口，传入启动参数
-            mainWindow = new MainWindow(startupUrl, shouldUseCleanMode);
+            mainWindow = new MainWindow(startupUrl, shouldUseCleanMode, shouldForceUncleanMode);
             
             // 根据 --open 参数决定是否显示窗口
             if (shouldOpen)
@@ -371,6 +391,49 @@ namespace TrayChrome
                     }
                 }
             }
+        }
+
+        // 显示帮助信息
+        private void ShowHelpMessage()
+        {
+            string helpText = @"TrayChrome - 托盘浏览器
+
+用法: TrayChrome.exe [选项] [URL]
+
+选项:
+  --url <URL>          指定启动时要打开的网址
+                       格式: --url https://example.com
+                       或: --url=https://example.com
+
+  --open               启动时直接显示窗口（默认最小化到托盘）
+                       
+  --clean              启用超级极简模式（隐藏底部工具栏）
+                       注意：此设置会被保存，下次启动时仍然生效
+                       
+  --unclean            强制禁用超级极简模式（显示底部工具栏）
+                       用于覆盖之前保存的超级极简模式设置
+                       
+  --help, -h           显示此帮助信息
+
+示例:
+  TrayChrome.exe
+  TrayChrome.exe --url https://www.baidu.com
+  TrayChrome.exe --url https://www.google.com --open
+  TrayChrome.exe --url https://jandan.net --open --clean
+  TrayChrome.exe --unclean
+  TrayChrome.exe https://github.com
+
+功能说明:
+  • 左键点击托盘图标：显示/隐藏窗口
+  • 中键点击托盘图标：关闭当前实例
+  • 右键点击托盘图标：显示菜单
+  • 支持多实例运行
+  • 自动保存窗口位置和大小
+  • 支持收藏夹功能
+  • 支持暗色模式切换
+  • 支持窗口置顶功能";
+
+            MessageBox.Show(helpText, "TrayChrome 帮助", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }
