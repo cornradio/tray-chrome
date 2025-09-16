@@ -44,6 +44,7 @@ namespace TrayChrome
         private bool isDarkMode = false;
         private bool isTopMost = true; // 默认置顶
         private bool isSuperMinimalMode = false; // 超级极简模式状态
+        private bool isAnimationEnabled = true; // 动画启用状态
         
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
@@ -429,6 +430,14 @@ namespace TrayChrome
             Show();
             Activate(); // 确保窗口获得焦点
             
+            // 检查是否应该禁用动画
+            if (SystemAnimationHelper.ShouldDisableAnimation(isAnimationEnabled))
+            {
+                // 直接设置位置，不使用动画
+                Top = targetTop;
+                return;
+            }
+            
             var animation = new DoubleAnimation
             {
                 From = workingArea.Bottom + 50,
@@ -445,6 +454,14 @@ namespace TrayChrome
         public void HideWithAnimation()
         {
             var workingArea = SystemParameters.WorkArea;
+            
+            // 检查是否应该禁用动画
+            if (SystemAnimationHelper.ShouldDisableAnimation(isAnimationEnabled))
+            {
+                // 直接隐藏，不使用动画
+                Hide();
+                return;
+            }
             
             var animation = new DoubleAnimation
             {
@@ -557,6 +574,7 @@ namespace TrayChrome
                 isDarkMode = appSettings.IsDarkMode;
                 isTopMost = appSettings.IsTopMost;
                 isSuperMinimalMode = appSettings.IsSuperMinimalMode;
+                isAnimationEnabled = appSettings.IsAnimationEnabled;
             }
             catch (Exception ex)
             {
@@ -576,6 +594,7 @@ namespace TrayChrome
                 appSettings.IsDarkMode = isDarkMode;
                 appSettings.IsTopMost = isTopMost;
                 appSettings.IsSuperMinimalMode = isSuperMinimalMode;
+                appSettings.IsAnimationEnabled = isAnimationEnabled;
                 
                 var json = JsonSerializer.Serialize(appSettings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(settingsFilePath, json);
@@ -860,7 +879,14 @@ namespace TrayChrome
             SaveSettings();
         }
         
+        public void ToggleAnimation(bool enabled)
+        {
+            isAnimationEnabled = enabled;
+            SaveSettings();
+        }
+        
         public bool IsSuperMinimalMode => isSuperMinimalMode;
+        public bool IsAnimationEnabled => isAnimationEnabled;
     }
 
     public class Bookmark
@@ -878,5 +904,6 @@ namespace TrayChrome
         public bool IsDarkMode { get; set; } = false;
         public bool IsTopMost { get; set; } = true;
         public bool IsSuperMinimalMode { get; set; } = false;
+        public bool IsAnimationEnabled { get; set; } = true;
     }
 }

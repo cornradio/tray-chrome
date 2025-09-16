@@ -11,6 +11,7 @@
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="超级极简模式" Name="SuperMinimalModeMenuItem" Click="SuperMinimalMode_Click" IsCheckable="True" />
+                    <MenuItem Header="启用动画" Name="AnimationMenuItem" Click="Animation_Click" IsCheckable="True" IsChecked="True" />
                     <MenuItem Header="收藏夹" Name="BookmarksMenuItem">
                         <MenuItem Header="添加到收藏夹" Click="AddBookmarkFromTray_Click"/>
                         <MenuItem Header="编辑收藏夹" Click="EditBookmarkFromTray_Click"/>

@@ -124,6 +124,7 @@ namespace TrayChrome
             
             // 更新托盘菜单中超级极简模式的状态
             UpdateSuperMinimalModeMenuState();
+            UpdateAnimationMenuState();
             
             // 加载收藏夹并刷新托盘菜单
             LoadBookmarks();
@@ -215,6 +216,17 @@ namespace TrayChrome
                 UpdateSuperMinimalModeMenuState();
             }
         }
+
+        private void Animation_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && mainWindow != null)
+            {
+                // 切换动画设置
+                mainWindow.ToggleAnimation(menuItem.IsChecked);
+                
+                UpdateAnimationMenuState();
+            }
+        }
         
         private void UpdateSuperMinimalModeMenuState()
         {
@@ -225,6 +237,19 @@ namespace TrayChrome
                 if (menuItem != null)
                 {
                     menuItem.IsChecked = mainWindow.IsSuperMinimalMode;
+                }
+            }
+        }
+
+        private void UpdateAnimationMenuState()
+        {
+            if (trayIcon?.ContextMenu != null && mainWindow != null)
+            {
+                var menuItem = trayIcon.ContextMenu.Items.OfType<MenuItem>()
+                    .FirstOrDefault(item => item.Name == "AnimationMenuItem");
+                if (menuItem != null)
+                {
+                    menuItem.IsChecked = mainWindow.IsAnimationEnabled;
                 }
             }
         }
