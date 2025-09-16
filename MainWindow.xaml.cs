@@ -411,7 +411,7 @@ namespace TrayChrome
             {
                 From = workingArea.Bottom + 50,
                 To = targetTop,
-                Duration = TimeSpan.FromMilliseconds(500), // 缩短动画时间，提升流畅度
+                Duration = TimeSpan.FromMilliseconds(100), // 缩短动画时间，提升流畅度
                 EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseOut } // 使用自定义流畅缓动函数
             };
             
@@ -428,7 +428,7 @@ namespace TrayChrome
             {
                 From = Top,
                 To = workingArea.Bottom + 50,
-                Duration = TimeSpan.FromMilliseconds(500), // 隐藏动画更快一些
+                Duration = TimeSpan.FromMilliseconds(100), // 隐藏动画更快一些
                 EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseIn } // 使用自定义流畅缓动函数
             };
             
