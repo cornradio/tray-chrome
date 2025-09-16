@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Microsoft.Web.WebView2.Core;
@@ -15,6 +17,19 @@ namespace TrayChrome
 {
     public partial class MainWindow : Window
     {
+        // Windows API 常量
+        private const int WM_NCHITTEST = 0x84;
+        private const int HTCLIENT = 1;
+        private const int HTCAPTION = 2;
+        private const int HTLEFT = 10;
+        private const int HTRIGHT = 11;
+        private const int HTTOP = 12;
+        private const int HTTOPLEFT = 13;
+        private const int HTTOPRIGHT = 14;
+        private const int HTBOTTOM = 15;
+        private const int HTBOTTOMLEFT = 16;
+        private const int HTBOTTOMRIGHT = 17;
+        
         private List<Bookmark> bookmarks = new List<Bookmark>();
         private string bookmarksFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "bookmarks.json");
         private string settingsFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "settings.json");
@@ -62,6 +77,9 @@ namespace TrayChrome
             
             // 窗口关闭时保存设置
             this.Closing += (sender, e) => SaveSettings();
+            
+            // 启用窗口边缘调整大小功能
+            this.SourceInitialized += MainWindow_SourceInitialized;
             
             // 初始化托盘提示
             UpdateTrayTooltip();
@@ -722,6 +740,41 @@ namespace TrayChrome
                 resizeStartPoint = currentPoint;
                 e.Handled = true;
             }
+        }
+        
+        private void MainWindow_SourceInitialized(object sender, EventArgs e)
+        {
+            var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            hwndSource?.AddHook(WndProc);
+        }
+        
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_NCHITTEST)
+            {
+                var point = new Point(lParam.ToInt32() & 0xFFFF, lParam.ToInt32() >> 16);
+                point = PointFromScreen(point);
+                
+                const int resizeBorder = 5;
+                
+                // 检查是否在边缘
+                bool onLeft = point.X <= resizeBorder;
+                bool onRight = point.X >= ActualWidth - resizeBorder;
+                bool onTop = point.Y <= resizeBorder;
+                bool onBottom = point.Y >= ActualHeight - resizeBorder;
+                
+                // 返回相应的调整大小区域
+                if (onTop && onLeft) { handled = true; return new IntPtr(HTTOPLEFT); }
+                if (onTop && onRight) { handled = true; return new IntPtr(HTTOPRIGHT); }
+                if (onBottom && onLeft) { handled = true; return new IntPtr(HTBOTTOMLEFT); }
+                if (onBottom && onRight) { handled = true; return new IntPtr(HTBOTTOMRIGHT); }
+                if (onTop) { handled = true; return new IntPtr(HTTOP); }
+                if (onBottom) { handled = true; return new IntPtr(HTBOTTOM); }
+                if (onLeft) { handled = true; return new IntPtr(HTLEFT); }
+                if (onRight) { handled = true; return new IntPtr(HTRIGHT); }
+            }
+            
+            return IntPtr.Zero;
         }
     }
 
