@@ -60,6 +60,12 @@ namespace TrayChrome
             this.Topmost = isTopMost;
             UpdateTopMostButtonAppearance();
             
+            // 应用超级极简模式设置
+            if (isSuperMinimalMode)
+            {
+                ToggleSuperMinimalMode(true);
+            }
+            
             // 添加汉堡菜单拖拽功能
             HamburgerMenu.MouseLeftButtonDown += HamburgerMenu_MouseLeftButtonDown;
             
@@ -371,6 +377,21 @@ namespace TrayChrome
             base.OnStateChanged(e);
         }
 
+        // 自定义流畅的缓动函数，专为高刷新率屏幕优化
+        private class SmoothEase : EasingFunctionBase
+        {
+            protected override double EaseInCore(double normalizedTime)
+            {
+                // 使用改进的贝塞尔曲线，提供更自然的动画效果
+                return normalizedTime * normalizedTime * (3.0 - 2.0 * normalizedTime);
+            }
+
+            protected override Freezable CreateInstanceCore()
+            {
+                return new SmoothEase();
+            }
+        }
+
         private void SetupWindowAnimation()
         {
             // 初始化窗口位置到屏幕下方
@@ -390,9 +411,11 @@ namespace TrayChrome
             {
                 From = workingArea.Bottom + 50,
                 To = targetTop,
-                Duration = TimeSpan.FromMilliseconds(300),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                Duration = TimeSpan.FromMilliseconds(500), // 缩短动画时间，提升流畅度
+                EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseOut } // 使用自定义流畅缓动函数
             };
+            
+
             
             BeginAnimation(TopProperty, animation);
         }
@@ -405,9 +428,11 @@ namespace TrayChrome
             {
                 From = Top,
                 To = workingArea.Bottom + 50,
-                Duration = TimeSpan.FromMilliseconds(300),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+                Duration = TimeSpan.FromMilliseconds(500), // 隐藏动画更快一些
+                EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseIn } // 使用自定义流畅缓动函数
             };
+            
+
             
             animation.Completed += (s, e) => Hide();
             BeginAnimation(TopProperty, animation);
@@ -509,6 +534,7 @@ namespace TrayChrome
                 this.Height = appSettings.WindowHeight;
                 isDarkMode = appSettings.IsDarkMode;
                 isTopMost = appSettings.IsTopMost;
+                isSuperMinimalMode = appSettings.IsSuperMinimalMode;
             }
             catch (Exception ex)
             {
@@ -527,6 +553,7 @@ namespace TrayChrome
                 appSettings.WindowHeight = this.Height;
                 appSettings.IsDarkMode = isDarkMode;
                 appSettings.IsTopMost = isTopMost;
+                appSettings.IsSuperMinimalMode = isSuperMinimalMode;
                 
                 var json = JsonSerializer.Serialize(appSettings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(settingsFilePath, json);
@@ -806,6 +833,9 @@ namespace TrayChrome
                     mainGrid.RowDefinitions[2].Height = new GridLength(40);
                 }
             }
+            
+            // 保存设置
+            SaveSettings();
         }
         
         public bool IsSuperMinimalMode => isSuperMinimalMode;
@@ -825,5 +855,6 @@ namespace TrayChrome
         public double WindowHeight { get; set; } = 640;
         public bool IsDarkMode { get; set; } = false;
         public bool IsTopMost { get; set; } = true;
+        public bool IsSuperMinimalMode { get; set; } = false;
     }
 }

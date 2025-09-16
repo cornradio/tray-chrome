@@ -42,6 +42,9 @@ namespace TrayChrome
             // 订阅标题变化事件
             mainWindow.TitleChanged += OnMainWindowTitleChanged;
             
+            // 更新托盘菜单中超级极简模式的状态
+            UpdateSuperMinimalModeMenuState();
+            
             // 加载收藏夹并刷新托盘菜单
             LoadBookmarks();
             RefreshTrayBookmarkMenu();
