@@ -6,10 +6,12 @@
         <!-- 托盘图标定义 -->
         <tb:TaskbarIcon x:Key="TrayIcon"
                         IconSource="Resources/Ampeross-Ampola-Chrome.ico"
-                        TrayLeftMouseUp="TrayIcon_TrayLeftMouseUp">
+                        TrayLeftMouseUp="TrayIcon_TrayLeftMouseUp"
+                        TrayMiddleMouseUp="TrayIcon_TrayMiddleMouseUp">
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="增加实例" Click="AddInstance_Click" />
+                    <MenuItem Header="重启实例" Click="RestartInstance_Click" />
                     <Separator />
                     <MenuItem Header="关闭实例" Click="CloseInstance_Click" />
                 </ContextMenu>

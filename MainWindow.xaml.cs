@@ -26,6 +26,9 @@ namespace TrayChrome
         private AppSettings appSettings = new AppSettings();
         private bool isResizing = false;
         private Point resizeStartPoint;
+        
+        // 用于更新托盘图标提示的事件
+        public event Action<string> TitleChanged;
 
         public MainWindow()
         {
@@ -48,6 +51,9 @@ namespace TrayChrome
             
             // 窗口关闭时保存设置
             this.Closing += (sender, e) => SaveSettings();
+            
+            // 初始化托盘提示
+            UpdateTrayTooltip();
         }
 
         private async void InitializeWebView()
@@ -68,6 +74,9 @@ namespace TrayChrome
                 // 监听导航事件
                 webView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
                 webView.CoreWebView2.SourceChanged += CoreWebView2_SourceChanged;
+                
+                // 监听文档标题变化事件
+                webView.CoreWebView2.DocumentTitleChanged += CoreWebView2_DocumentTitleChanged;
             }
             catch (Exception ex)
             {
@@ -91,7 +100,49 @@ namespace TrayChrome
                 ForwardButton.IsEnabled = webView.CoreWebView2.CanGoForward;
                 // 确保每个页面都使用相同的缩放比例
                 webView.ZoomFactor = currentZoomFactor;
+                
+                // 更新托盘图标提示
+                UpdateTrayTooltip();
             });
+        }
+        
+        private void CoreWebView2_DocumentTitleChanged(object? sender, object e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateTrayTooltip();
+            });
+        }
+        
+        private void UpdateTrayTooltip()
+        {
+            try
+            {
+                string title = webView.CoreWebView2?.DocumentTitle ?? "未知页面";
+                string url = webView.CoreWebView2?.Source ?? "";
+                
+                // 如果标题为空或只是URL，使用URL作为标题
+                if (string.IsNullOrWhiteSpace(title) || title == url)
+                {
+                    if (!string.IsNullOrEmpty(url))
+                    {
+                        Uri uri = new Uri(url);
+                        title = uri.Host;
+                    }
+                    else
+                    {
+                        title = "Tray Chrome";
+                    }
+                }
+                
+                // 触发标题变化事件，通知App更新托盘图标提示
+                TitleChanged?.Invoke(title);
+            }
+            catch (Exception ex)
+            {
+                // 如果出现异常，使用默认标题
+                TitleChanged?.Invoke("Tray Chrome");
+            }
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)

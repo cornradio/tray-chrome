@@ -32,6 +32,9 @@ namespace TrayChrome
             mainWindow = new MainWindow();
             mainWindow.Hide();
             
+            // 订阅标题变化事件
+            mainWindow.TitleChanged += OnMainWindowTitleChanged;
+            
             // 隐藏主窗口，只显示托盘图标
             MainWindow = mainWindow;
             MainWindow.WindowState = WindowState.Minimized;
@@ -72,14 +75,55 @@ namespace TrayChrome
             }
         }
 
+        private void TrayIcon_TrayMiddleMouseUp(object sender, RoutedEventArgs e)
+        {
+            // 鼠标中键点击关闭实例
+            Application.Current.Shutdown();
+        }
+
+        private void RestartInstance_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 启动新的应用程序实例
+                string currentExecutable = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                if (!string.IsNullOrEmpty(currentExecutable))
+                {
+                    Process.Start(currentExecutable);
+                }
+                
+                // 关闭当前实例
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"重启实例失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void CloseInstance_Click(object sender, RoutedEventArgs e)
         {
             // 关闭当前实例
             Application.Current.Shutdown();
         }
 
+        private void OnMainWindowTitleChanged(string title)
+        {
+            if (trayIcon != null)
+            {
+                // 更新托盘图标的提示文本，只显示当前网页标题
+                trayIcon.ToolTipText = title;
+            }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
+            // 取消订阅事件
+            if (mainWindow != null)
+            {
+                mainWindow.TitleChanged -= OnMainWindowTitleChanged;
+            }
+            
             trayIcon?.Dispose();
             base.OnExit(e);
         }
