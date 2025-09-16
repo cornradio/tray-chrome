@@ -35,6 +35,9 @@ namespace TrayChrome
 
             // 解析命令行参数
             string? startupUrl = null;
+            bool shouldOpen = false; // 默认不直接显示窗口
+            bool shouldUseCleanMode = false; // 默认不使用超级简洁模式
+            
             if (e.Args.Length > 0)
             {
                 // 支持多种参数格式
@@ -46,19 +49,27 @@ namespace TrayChrome
                     if (arg.StartsWith("--url=", StringComparison.OrdinalIgnoreCase))
                     {
                         startupUrl = arg.Substring(6);
-                        break;
                     }
                     // 支持 --url https://example.com 格式
                     else if (arg.Equals("--url", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
                     {
                         startupUrl = e.Args[i + 1];
-                        break;
+                        i++; // 跳过下一个参数，因为已经作为URL使用了
+                    }
+                    // 支持 --open 格式
+                    else if (arg.Equals("--open", StringComparison.OrdinalIgnoreCase))
+                    {
+                        shouldOpen = true;
+                    }
+                    // 支持 --clean 格式
+                    else if (arg.Equals("--clean", StringComparison.OrdinalIgnoreCase))
+                    {
+                        shouldUseCleanMode = true;
                     }
                     // 支持直接传入URL（如果看起来像URL）
                     else if (IsValidUrl(arg))
                     {
                         startupUrl = arg;
-                        break;
                     }
                 }
             }
@@ -72,9 +83,21 @@ namespace TrayChrome
                 trayIcon.ToolTipText = $"Tray Chrome Browser - 实例 {currentInstanceId}";
             }
             
-            // 创建主窗口但不显示，传入启动URL
-            mainWindow = new MainWindow(startupUrl);
-            mainWindow.Hide();
+            // 创建主窗口，传入启动参数
+            mainWindow = new MainWindow(startupUrl, shouldUseCleanMode);
+            
+            // 根据 --open 参数决定是否显示窗口
+            if (shouldOpen)
+            {
+                // 模拟托盘图标点击事件的逻辑
+                mainWindow.ShowWithAnimation();
+                mainWindow.WindowState = WindowState.Normal;
+                mainWindow.Activate();
+            }
+            else
+            {
+                mainWindow.Hide();
+            }
             
             // 订阅标题变化事件
             mainWindow.TitleChanged += OnMainWindowTitleChanged;
@@ -88,7 +111,10 @@ namespace TrayChrome
             
             // 隐藏主窗口，只显示托盘图标
             MainWindow = mainWindow;
-            MainWindow.WindowState = WindowState.Minimized;
+            if (!shouldOpen)
+            {
+                MainWindow.WindowState = WindowState.Minimized;
+            }
             MainWindow.ShowInTaskbar = false;
         }
 

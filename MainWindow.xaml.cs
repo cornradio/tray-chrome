@@ -48,10 +48,17 @@ namespace TrayChrome
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
 
-        public MainWindow(string? startupUrl = null)
+        public MainWindow(string? startupUrl = null, bool useCleanMode = false)
         {
             InitializeComponent();
             LoadSettings();
+            
+            // 如果命令行指定了超级简洁模式，覆盖设置
+            if (useCleanMode)
+            {
+                isSuperMinimalMode = true;
+            }
+            
             InitializeWebView(startupUrl);
             LoadBookmarks();
             SetupWindowAnimation();
@@ -413,6 +420,7 @@ namespace TrayChrome
             var targetTop = workingArea.Bottom - Height - 20;
             
             Show();
+            Activate(); // 确保窗口获得焦点
             
             var animation = new DoubleAnimation
             {
