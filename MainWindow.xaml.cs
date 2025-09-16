@@ -434,13 +434,13 @@ namespace TrayChrome
                 if (isMobileUA)
                 {
                     webView.CoreWebView2.Settings.UserAgent = MobileUA;
-                    UAButton.Content = "📱";
+                    UAButton.Content = "▯";
                     UAButton.ToolTip = "切换用户代理 (当前: 手机)";
                 }
                 else
                 {
                     webView.CoreWebView2.Settings.UserAgent = DesktopUA;
-                    UAButton.Content = "🖥️";
+                    UAButton.Content = "🖳";
                     UAButton.ToolTip = "切换用户代理 (当前: 桌面)";
                 }
                 

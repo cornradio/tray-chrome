@@ -11,7 +11,7 @@
         Topmost="True"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="#2D2D30">
+        Background="Transparent">
     
     <Window.Resources>
         <!-- 自定义按钮样式 -->
@@ -49,7 +49,13 @@
         </Style>
     </Window.Resources>
     
-    <Grid>
+    <!-- 外层容器，用于创建阴影效果 -->
+    <Border Background="#2D2D30" CornerRadius="8" Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" Direction="0" ShadowDepth="0" Opacity="0.6" BlurRadius="15"/>
+        </Border.Effect>
+        
+        <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="35"/>
             <RowDefinition Height="*"/>
@@ -60,30 +66,26 @@
         <Border Grid.Row="0" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="40"/>
                 </Grid.ColumnDefinitions>
                 
-                <!-- 汉堡菜单按钮 -->
-                <Label Grid.Column="0" Name="HamburgerMenu" 
-                       Background="Transparent" Foreground="#FFFFFF"
-                       Margin="5" 
-                       FontSize="16"
-                       Content="☰"
-                       Cursor="Hand"
-                       HorizontalContentAlignment="Center"
-                       VerticalContentAlignment="Center"/>
+
                 
                 <!-- 地址栏 -->
-                <TextBox Grid.Column="1" Name="AddressBar" 
+                <TextBox Grid.Column="0" Name="AddressBar" 
                          Background="#444" Foreground="#FFFFFF" 
-                         BorderThickness="1" BorderBrush="#888"
+                         BorderThickness="0" BorderBrush="#888"
                          Margin="0,3,5,3" Padding="8,5" 
                          Text="https://www.google.com"
                          KeyDown="AddressBar_KeyDown"
-                         FontSize="12"
+                         FontSize="10"
                          FontWeight="Normal"
                          VerticalContentAlignment="Center"/>
+
+                <!-- 关闭按钮 -->
+                <Button Grid.Column="1" Name="CloseButton" Content="×" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="CloseButton_Click"/>
             </Grid>
         </Border>
         
@@ -133,29 +135,34 @@
                 </Button>
                 
                 <!-- UA切换按钮 -->
-                <Button Grid.Column="4" Name="UAButton" Content="📱" 
+                <Button Grid.Column="4" Name="UAButton" Content="▯" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="UAButton_Click"
                         ToolTip="切换用户代理 (当前: 手机)"/>
-                
+                                <!-- Popup按钮 -->
+                <Button Grid.Column="5" Name="PopupButton" Content="⫘" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click"
+                        ToolTip="在新标签页打开"/>
                 <!-- 缩小按钮 -->
-                <Button Grid.Column="5" Name="ZoomOutButton" Content="-" 
+                <Button Grid.Column="6" Name="ZoomOutButton" Content="-" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="ZoomOut_Click"
                         ToolTip="缩小"/>
-                
                 <!-- 放大按钮 -->
-                <Button Grid.Column="6" Name="ZoomInButton" Content="+" 
+                <Button Grid.Column="7" Name="ZoomInButton" Content="+" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click"
                         ToolTip="放大"/>
                 
-                <!-- Popup按钮 -->
-                <Button Grid.Column="7" Name="PopupButton" Content="🔗" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click"
-                        ToolTip="在新标签页打开"/>
-                
-                <!-- 关闭按钮 -->
-                <Button Grid.Column="9" Name="CloseButton" Content="×" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="CloseButton_Click"/>
+
+                <!-- 汉堡菜单按钮 -->
+                <Label Grid.Column="9" Name="HamburgerMenu" 
+                       Background="Transparent" Foreground="#FFFFFF"
+                       Margin="5" 
+                       Content="☰"
+                       Cursor="Hand"
+                       HorizontalContentAlignment="Center"
+                       VerticalContentAlignment="Center"/>
+
             </Grid>
         </Border>
-    </Grid>
+        </Grid>
+    </Border>
 </Window>
