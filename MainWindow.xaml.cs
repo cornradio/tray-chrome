@@ -26,6 +26,7 @@ namespace TrayChrome
         private AppSettings appSettings = new AppSettings();
         private bool isResizing = false;
         private Point resizeStartPoint;
+        private bool isDarkMode = false;
         
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
@@ -54,6 +55,9 @@ namespace TrayChrome
             
             // 初始化托盘提示
             UpdateTrayTooltip();
+            
+            // 初始化暗色模式按钮外观
+            UpdateDarkModeButtonAppearance();
         }
 
         private async void InitializeWebView()
@@ -70,6 +74,9 @@ namespace TrayChrome
                 
                 // 启用开发者工具
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
+                
+                // 初始化时设置浏览器外观模式
+                ApplyBrowserAppearance(isDarkMode);
                 
                 // 监听导航事件
                 webView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
@@ -100,6 +107,8 @@ namespace TrayChrome
                 ForwardButton.IsEnabled = webView.CoreWebView2.CanGoForward;
                 // 确保每个页面都使用相同的缩放比例
                 webView.ZoomFactor = currentZoomFactor;
+                
+                // 外观模式已在初始化时设置
                 
                 // 更新托盘图标提示
                 UpdateTrayTooltip();
@@ -144,6 +153,32 @@ namespace TrayChrome
                 TitleChanged?.Invoke("Tray Chrome");
             }
         }
+        
+        private void ApplyBrowserAppearance(bool darkMode)
+        {
+            try
+            {
+                if (webView.CoreWebView2 == null) return;
+                
+                // 设置浏览器的外观模式
+                webView.CoreWebView2.Profile.PreferredColorScheme = darkMode 
+                    ? Microsoft.Web.WebView2.Core.CoreWebView2PreferredColorScheme.Dark 
+                    : Microsoft.Web.WebView2.Core.CoreWebView2PreferredColorScheme.Light;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"设置浏览器外观失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+         
+         private void UpdateDarkModeButtonAppearance()
+         {
+             if (DarkModeButton != null)
+             {
+                 DarkModeButton.Content = isDarkMode ? "⏾" : "☼";
+                 DarkModeButton.ToolTip = isDarkMode ? "切换到亮色模式" : "切换到暗色模式";
+             }
+         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
@@ -201,6 +236,20 @@ namespace TrayChrome
         private void UAButton_Click(object sender, RoutedEventArgs e)
         {
             ToggleUserAgent();
+        }
+        
+        private void DarkModeButton_Click(object sender, RoutedEventArgs e)
+        {
+            isDarkMode = !isDarkMode;
+            ApplyBrowserAppearance(isDarkMode);
+            UpdateDarkModeButtonAppearance();
+            SaveSettings();
+            
+            // 刷新当前页面以立即应用外观模式
+            if (webView.CoreWebView2 != null)
+            {
+                webView.CoreWebView2.Reload();
+            }
         }
 
         private void AddressBar_KeyDown(object sender, KeyEventArgs e)
@@ -388,6 +437,7 @@ namespace TrayChrome
                 isMobileUA = appSettings.IsMobileUA;
                 this.Width = appSettings.WindowWidth;
                 this.Height = appSettings.WindowHeight;
+                isDarkMode = appSettings.IsDarkMode;
             }
             catch (Exception ex)
             {
@@ -404,6 +454,7 @@ namespace TrayChrome
                 appSettings.IsMobileUA = isMobileUA;
                 appSettings.WindowWidth = this.Width;
                 appSettings.WindowHeight = this.Height;
+                appSettings.IsDarkMode = isDarkMode;
                 
                 var json = JsonSerializer.Serialize(appSettings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(settingsFilePath, json);
@@ -574,5 +625,6 @@ namespace TrayChrome
         public bool IsMobileUA { get; set; } = true;
         public double WindowWidth { get; set; } = 360;
         public double WindowHeight { get; set; } = 640;
+        public bool IsDarkMode { get; set; } = false;
     }
 }

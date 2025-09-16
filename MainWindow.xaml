@@ -104,6 +104,7 @@
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="30"/>
                 </Grid.ColumnDefinitions>
@@ -135,7 +136,7 @@
                 </Button>
                 
                 <!-- UA切换按钮 -->
-                <Button Grid.Column="4" Name="UAButton" Content="▯" 
+                <Button Grid.Column="6" Name="UAButton" Content="▯" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="UAButton_Click"
                         ToolTip="切换用户代理 (当前: 手机)"/>
                                 <!-- Popup按钮 -->
@@ -143,17 +144,21 @@
                         Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click"
                         ToolTip="在新标签页打开"/>
                 <!-- 缩小按钮 -->
-                <Button Grid.Column="6" Name="ZoomOutButton" Content="-" 
+                <Button Grid.Column="7" Name="ZoomOutButton" Content="-" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="ZoomOut_Click"
                         ToolTip="缩小"/>
                 <!-- 放大按钮 -->
-                <Button Grid.Column="7" Name="ZoomInButton" Content="+" 
+                <Button Grid.Column="8" Name="ZoomInButton" Content="+" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click"
                         ToolTip="放大"/>
                 
+                <!-- 日夜模式切换按钮 -->
+                <Button Grid.Column="4" Name="DarkModeButton" Content="☾" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="DarkModeButton_Click"
+                        ToolTip="切换暗色模式"/>
 
                 <!-- 汉堡菜单按钮 -->
-                <Label Grid.Column="9" Name="HamburgerMenu" 
+                <Label Grid.Column="10" Name="HamburgerMenu" 
                        Background="Transparent" Foreground="#FFFFFF"
                        Margin="5" 
                        Content="☰"
