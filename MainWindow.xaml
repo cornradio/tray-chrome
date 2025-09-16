@@ -71,10 +71,14 @@
                     <ColumnDefinition Width="40"/>
                 </Grid.ColumnDefinitions>
                 
-                <!-- 置顶按钮 -->
-                <Button Grid.Column="0" Name="TopMostButton" Content="📌" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="TopMostButton_Click"
-                        ToolTip="取消置顶" Margin="2"/>
+                <!-- 汉堡菜单按钮 -->
+                <Label Grid.Column="0" Name="HamburgerMenu" 
+                       Background="Transparent" Foreground="#FFFFFF"
+                       Margin="2" 
+                       Content="☰"
+                       Cursor="Hand"
+                       HorizontalContentAlignment="Center"
+                       VerticalContentAlignment="Center"/>
                 
                 <!-- 地址栏 -->
                 <TextBox Grid.Column="1" Name="AddressBar" 
@@ -100,6 +104,7 @@
         <Border Grid.Row="2" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">
             <Grid Margin="5">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
@@ -143,32 +148,46 @@
                 <Button Grid.Column="6" Name="UAButton" Content="▯" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="UAButton_Click"
                         ToolTip="切换用户代理 (当前: 手机)"/>
-                                <!-- Popup按钮 -->
+                <!-- Popup按钮 -->
                 <Button Grid.Column="5" Name="PopupButton" Content="⫘" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click"
                         ToolTip="在新标签页打开"/>
-                <!-- 缩小按钮 -->
-                <Button Grid.Column="7" Name="ZoomOutButton" Content="-" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="ZoomOut_Click"
-                        ToolTip="缩小"/>
-                <!-- 放大按钮 -->
-                <Button Grid.Column="8" Name="ZoomInButton" Content="+" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click"
-                        ToolTip="放大"/>
-                
-                <!-- 日夜模式切换按钮 -->
+                    <!-- 日夜模式切换按钮 -->
                 <Button Grid.Column="4" Name="DarkModeButton" Content="☾" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="DarkModeButton_Click"
                         ToolTip="切换暗色模式"/>
 
-                <!-- 汉堡菜单按钮 -->
-                <Label Grid.Column="10" Name="HamburgerMenu" 
-                       Background="Transparent" Foreground="#FFFFFF"
-                       Margin="5" 
-                       Content="☰"
-                       Cursor="Hand"
+                <!-- 置顶按钮 -->
+                <Button Grid.Column="7" Name="TopMostButton" Content="📌" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="TopMostButton_Click"
+                        ToolTip="取消置顶"/>
+                        
+                <!-- 拖动按钮 -->
+                <Label Grid.Column="10" Name="DragButton" Content="" 
+                       Background="Transparent" Foreground="White"
+                       FontSize="16" Cursor="SizeAll"
                        HorizontalContentAlignment="Center"
-                       VerticalContentAlignment="Center"/>
+                       VerticalContentAlignment="Center"
+                       ToolTip="拖拽移动窗口"/>
+                       
+                <!-- 缩小按钮 -->
+                <Button Grid.Column="8" Name="ZoomOutButton" Content="-" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="ZoomOut_Click"
+                        ToolTip="缩小"/>
+                <!-- 放大按钮 -->
+                <Button Grid.Column="9" Name="ZoomInButton" Content="+" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click"
+                        ToolTip="放大"/>
+                
+                <!-- 窗口调整按钮 -->
+                <Label Grid.Column="11" Name="ResizeButton" Content="↘" 
+                       Background="Transparent" Foreground="White"
+                       FontSize="16" Cursor="Hand"
+                       HorizontalContentAlignment="Center"
+                       VerticalContentAlignment="Center"
+                       ToolTip="拖拽调整窗口大小"/>
+                
+
 
             </Grid>
         </Border>

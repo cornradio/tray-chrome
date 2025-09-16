@@ -45,15 +45,20 @@ namespace TrayChrome
             UpdateTopMostButtonAppearance();
             
             // 添加汉堡菜单拖拽功能
-            HamburgerMenu.MouseLeftButtonDown += (sender, e) => {
-                e.Handled = true;
-                this.DragMove();
-            };
+            HamburgerMenu.MouseLeftButtonDown += HamburgerMenu_MouseLeftButtonDown;
             
             // 添加汉堡菜单右键调整窗口大小功能
             HamburgerMenu.MouseRightButtonDown += HamburgerMenu_MouseRightButtonDown;
             HamburgerMenu.MouseRightButtonUp += HamburgerMenu_MouseRightButtonUp;
             HamburgerMenu.MouseMove += HamburgerMenu_MouseMove;
+            
+            // 添加窗口调整按钮的拖拽功能
+            ResizeButton.MouseLeftButtonDown += ResizeButton_MouseLeftButtonDown;
+            ResizeButton.MouseLeftButtonUp += ResizeButton_MouseLeftButtonUp;
+            ResizeButton.MouseMove += ResizeButton_MouseMove;
+            
+            // 添加拖动按钮的拖拽功能
+            DragButton.MouseLeftButtonDown += DragButton_MouseLeftButtonDown;
             
             // 窗口关闭时保存设置
             this.Closing += (sender, e) => SaveSettings();
@@ -213,7 +218,7 @@ namespace TrayChrome
          {
              if (TopMostButton != null)
              {
-                 TopMostButton.Content = isTopMost ? "⚲" : "⌕";
+                 TopMostButton.Content = isTopMost ? "📌" : "⚲";
                  TopMostButton.ToolTip = isTopMost ? "取消置顶" : "窗口置顶";
              }
          }
@@ -561,17 +566,18 @@ namespace TrayChrome
                     SaveBookmarks(); // 创建文件
                 }
                 
-                // 使用VS Code打开收藏夹JSON文件
+                // 直接打开配置文件夹
+                string configFolder = Path.GetDirectoryName(bookmarksFilePath);
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "code",
-                    Arguments = $"\"{bookmarksFilePath}\"",
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{configFolder}\"",
                     UseShellExecute = true
                 });
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"打开文件失败: {ex.Message}\n\n请确保已安装VS Code并添加到系统PATH中。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"打开配置文件夹失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -634,6 +640,64 @@ namespace TrayChrome
         private void HamburgerMenu_MouseMove(object sender, MouseEventArgs e)
         {
             if (isResizing && e.RightButton == MouseButtonState.Pressed)
+            {
+                Point currentPoint = e.GetPosition(this);
+                double deltaX = currentPoint.X - resizeStartPoint.X;
+                double deltaY = currentPoint.Y - resizeStartPoint.Y;
+                
+                // 调整窗口大小
+                double newWidth = this.Width + deltaX;
+                double newHeight = this.Height + deltaY;
+                
+                // 设置最小尺寸限制
+                if (newWidth >= 200)
+                {
+                    this.Width = newWidth;
+                }
+                
+                if (newHeight >= 300)
+                {
+                    this.Height = newHeight;
+                }
+                
+                // 更新起始点
+                resizeStartPoint = currentPoint;
+                e.Handled = true;
+            }
+        }
+
+        private void HamburgerMenu_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            this.DragMove();
+        }
+        
+        private void DragButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            this.DragMove();
+        }
+        
+        // ResizeButton的窗口调整大小功能
+        private void ResizeButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            isResizing = true;
+            resizeStartPoint = e.GetPosition(this);
+            ResizeButton.CaptureMouse();
+            e.Handled = true;
+        }
+        
+        private void ResizeButton_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (isResizing)
+            {
+                isResizing = false;
+                ResizeButton.ReleaseMouseCapture();
+                e.Handled = true;
+            }
+        }
+        
+        private void ResizeButton_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (isResizing && e.LeftButton == MouseButtonState.Pressed)
             {
                 Point currentPoint = e.GetPosition(this);
                 double deltaX = currentPoint.X - resizeStartPoint.X;
