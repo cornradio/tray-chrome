@@ -3,14 +3,13 @@
 
 Write-Host "Starting TrayChrome application packaging..." -ForegroundColor Green
 
-# Clean previous publish files
-if (Test-Path "./publish") {
-    Write-Host "Cleaning old publish files..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force "./publish"
+# Create publish directory if it doesn't exist
+if (-not (Test-Path "./publish")) {
+    Write-Host "Creating publish directory..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path "./publish" -Force | Out-Null
+} else {
+    Write-Host "Using existing publish directory..." -ForegroundColor Yellow
 }
-
-# Create publish directory
-New-Item -ItemType Directory -Path "./publish" -Force | Out-Null
 
 try {
     # Publish as single file, framework-dependent (requires .NET runtime on target)
