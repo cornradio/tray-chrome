@@ -524,7 +524,7 @@ namespace TrayChrome
             }
         }
 
-        private void RefreshBookmarkMenu()
+        public void RefreshBookmarkMenu()
         {
             // 清除现有的收藏夹菜单项（保留"添加到收藏夹"和分隔符）
             var itemsToRemove = BookmarkContextMenu.Items.Cast<object>().Skip(2).ToList();
@@ -543,12 +543,53 @@ namespace TrayChrome
                     ToolTip = bookmark.Url
                 };
                 
+                // 左键点击导航
                 bookmarkItem.Click += (s, args) => {
                     if (bookmarkItem.Tag != null)
                     {
                         webView.CoreWebView2?.Navigate(bookmarkItem.Tag.ToString());
                     }
                 };
+                
+                // 中键点击删除
+                bookmarkItem.MouseUp += (s, args) => {
+                    if (args.ChangedButton == System.Windows.Input.MouseButton.Middle)
+                    {
+                        var result = MessageBox.Show($"确定要删除收藏夹 \"{bookmark.Title}\" 吗？", 
+                            "删除收藏夹", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                        
+                        if (result == MessageBoxResult.Yes)
+                        {
+                            bookmarks.Remove(bookmark);
+                            SaveBookmarks();
+                            RefreshBookmarkMenu();
+                        }
+                        args.Handled = true;
+                    }
+                };
+                
+                // 添加右键上下文菜单
+                ContextMenu itemContextMenu = new ContextMenu();
+                
+                MenuItem editItem = new MenuItem { Header = "编辑" };
+                editItem.Click += (s, args) => EditBookmark(bookmark);
+                
+                MenuItem deleteItem = new MenuItem { Header = "删除" };
+                deleteItem.Click += (s, args) => {
+                    var result = MessageBox.Show($"确定要删除收藏夹 \"{bookmark.Title}\" 吗？", 
+                        "删除收藏夹", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        bookmarks.Remove(bookmark);
+                        SaveBookmarks();
+                        RefreshBookmarkMenu();
+                    }
+                };
+                
+                itemContextMenu.Items.Add(editItem);
+                itemContextMenu.Items.Add(deleteItem);
+                bookmarkItem.ContextMenu = itemContextMenu;
                 
                 BookmarkContextMenu.Items.Add(bookmarkItem);
             }
@@ -641,6 +682,112 @@ namespace TrayChrome
                 
                 MessageBox.Show($"已添加到收藏夹：{title}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
             }
+        }
+
+        private void EditBookmark(Bookmark bookmark)
+        {
+            // 创建编辑对话框
+            var dialog = new Window
+            {
+                Title = "编辑收藏夹",
+                Width = 400,
+                Height = 200,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize
+            };
+
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            // 标题标签和文本框
+            var titleLabel = new Label { Content = "标题:", Margin = new Thickness(10, 10, 5, 5) };
+            Grid.SetRow(titleLabel, 0);
+            Grid.SetColumn(titleLabel, 0);
+            grid.Children.Add(titleLabel);
+
+            var titleTextBox = new TextBox 
+            { 
+                Text = bookmark.Title, 
+                Margin = new Thickness(5, 10, 10, 5),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetRow(titleTextBox, 0);
+            Grid.SetColumn(titleTextBox, 1);
+            grid.Children.Add(titleTextBox);
+
+            // URL标签和文本框
+            var urlLabel = new Label { Content = "URL:", Margin = new Thickness(10, 5, 5, 5) };
+            Grid.SetRow(urlLabel, 1);
+            Grid.SetColumn(urlLabel, 0);
+            grid.Children.Add(urlLabel);
+
+            var urlTextBox = new TextBox 
+            { 
+                Text = bookmark.Url, 
+                Margin = new Thickness(5, 5, 10, 5),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetRow(urlTextBox, 1);
+            Grid.SetColumn(urlTextBox, 1);
+            grid.Children.Add(urlTextBox);
+
+            // 按钮面板
+            var buttonPanel = new StackPanel 
+            { 
+                Orientation = Orientation.Horizontal, 
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(10, 20, 10, 10)
+            };
+            Grid.SetRow(buttonPanel, 2);
+            Grid.SetColumnSpan(buttonPanel, 2);
+
+            var okButton = new Button 
+            { 
+                Content = "确定", 
+                Width = 80, 
+                Height = 30, 
+                Margin = new Thickness(5, 0, 5, 0)
+            };
+            okButton.Click += (s, e) => {
+                if (!string.IsNullOrWhiteSpace(titleTextBox.Text) && !string.IsNullOrWhiteSpace(urlTextBox.Text))
+                {
+                    bookmark.Title = titleTextBox.Text.Trim();
+                    bookmark.Url = urlTextBox.Text.Trim();
+                    SaveBookmarks();
+                    RefreshBookmarkMenu();
+                    dialog.DialogResult = true;
+                    dialog.Close();
+                }
+                else
+                {
+                    MessageBox.Show("标题和URL不能为空！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            };
+
+            var cancelButton = new Button 
+            { 
+                Content = "取消", 
+                Width = 80, 
+                Height = 30, 
+                Margin = new Thickness(5, 0, 5, 0)
+            };
+            cancelButton.Click += (s, e) => {
+                dialog.DialogResult = false;
+                dialog.Close();
+            };
+
+            buttonPanel.Children.Add(okButton);
+            buttonPanel.Children.Add(cancelButton);
+            grid.Children.Add(buttonPanel);
+
+            dialog.Content = grid;
+            dialog.ShowDialog();
         }
 
         private void EditBookmarkJson_Click(object sender, RoutedEventArgs e)
