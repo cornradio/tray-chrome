@@ -66,14 +66,18 @@
         <Border Grid.Row="0" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="40"/>
                 </Grid.ColumnDefinitions>
                 
-
+                <!-- 置顶按钮 -->
+                <Button Grid.Column="0" Name="TopMostButton" Content="📌" 
+                        Style="{StaticResource ToolbarButtonStyle}" Click="TopMostButton_Click"
+                        ToolTip="取消置顶" Margin="2"/>
                 
                 <!-- 地址栏 -->
-                <TextBox Grid.Column="0" Name="AddressBar" 
+                <TextBox Grid.Column="1" Name="AddressBar" 
                          Background="#444" Foreground="#FFFFFF" 
                          BorderThickness="0" BorderBrush="#888"
                          Margin="0,3,5,3" Padding="8,5" 
@@ -84,7 +88,7 @@
                          VerticalContentAlignment="Center"/>
 
                 <!-- 关闭按钮 -->
-                <Button Grid.Column="1" Name="CloseButton" Content="×" 
+                <Button Grid.Column="2" Name="CloseButton" Content="×" 
                         Style="{StaticResource ToolbarButtonStyle}" Click="CloseButton_Click"/>
             </Grid>
         </Border>

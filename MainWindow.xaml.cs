@@ -27,6 +27,7 @@ namespace TrayChrome
         private bool isResizing = false;
         private Point resizeStartPoint;
         private bool isDarkMode = false;
+        private bool isTopMost = true; // 默认置顶
         
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
@@ -38,6 +39,10 @@ namespace TrayChrome
             InitializeWebView();
             LoadBookmarks();
             SetupWindowAnimation();
+            
+            // 设置初始置顶状态
+            this.Topmost = isTopMost;
+            UpdateTopMostButtonAppearance();
             
             // 添加汉堡菜单拖拽功能
             HamburgerMenu.MouseLeftButtonDown += (sender, e) => {
@@ -84,6 +89,9 @@ namespace TrayChrome
                 
                 // 监听文档标题变化事件
                 webView.CoreWebView2.DocumentTitleChanged += CoreWebView2_DocumentTitleChanged;
+                
+                // 拦截新窗口打开请求，在当前窗口中打开
+                webView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
             }
             catch (Exception ex)
             {
@@ -170,6 +178,27 @@ namespace TrayChrome
                 MessageBox.Show($"设置浏览器外观失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
+        
+        private void CoreWebView2_NewWindowRequested(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            // 检查是否按住了Ctrl键
+            bool isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            
+            if (isCtrlPressed)
+            {
+                // 按住Ctrl键时，在新的WebView2窗口中打开链接
+                e.Handled = false; // 允许WebView2创建新窗口
+            }
+            else
+            {
+                // 默认情况下，在当前窗口中打开链接
+                e.Handled = true;
+                if (!string.IsNullOrEmpty(e.Uri))
+                {
+                    webView.CoreWebView2?.Navigate(e.Uri);
+                }
+            }
+        }
          
          private void UpdateDarkModeButtonAppearance()
          {
@@ -177,6 +206,15 @@ namespace TrayChrome
              {
                  DarkModeButton.Content = isDarkMode ? "⏾" : "☼";
                  DarkModeButton.ToolTip = isDarkMode ? "切换到亮色模式" : "切换到暗色模式";
+             }
+         }
+         
+         private void UpdateTopMostButtonAppearance()
+         {
+             if (TopMostButton != null)
+             {
+                 TopMostButton.Content = isTopMost ? "⚲" : "⌕";
+                 TopMostButton.ToolTip = isTopMost ? "取消置顶" : "窗口置顶";
              }
          }
 
@@ -250,6 +288,14 @@ namespace TrayChrome
             {
                 webView.CoreWebView2.Reload();
             }
+        }
+        
+        private void TopMostButton_Click(object sender, RoutedEventArgs e)
+        {
+            isTopMost = !isTopMost;
+            this.Topmost = isTopMost;
+            UpdateTopMostButtonAppearance();
+            SaveSettings();
         }
 
         private void AddressBar_KeyDown(object sender, KeyEventArgs e)
@@ -438,6 +484,7 @@ namespace TrayChrome
                 this.Width = appSettings.WindowWidth;
                 this.Height = appSettings.WindowHeight;
                 isDarkMode = appSettings.IsDarkMode;
+                isTopMost = appSettings.IsTopMost;
             }
             catch (Exception ex)
             {
@@ -455,6 +502,7 @@ namespace TrayChrome
                 appSettings.WindowWidth = this.Width;
                 appSettings.WindowHeight = this.Height;
                 appSettings.IsDarkMode = isDarkMode;
+                appSettings.IsTopMost = isTopMost;
                 
                 var json = JsonSerializer.Serialize(appSettings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(settingsFilePath, json);
@@ -626,5 +674,6 @@ namespace TrayChrome
         public double WindowWidth { get; set; } = 360;
         public double WindowHeight { get; set; } = 640;
         public bool IsDarkMode { get; set; } = false;
+        public bool IsTopMost { get; set; } = true;
     }
 }
