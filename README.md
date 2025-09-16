@@ -93,6 +93,7 @@ and you can have mutiple of it.
 ### 键盘快捷键
 - **Enter**：地址栏中确认导航
 - **Ctrl + 点击链接**：在新窗口中打开
+- **win + 方向键** ： 快速调整尺寸
 
 ## 📁 文件存储
 
