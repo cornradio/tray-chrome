@@ -76,7 +76,7 @@
                        Background="Transparent" Foreground="#FFFFFF"
                        Margin="2" 
                        Content="☰"
-                       Cursor="Hand"
+                       Cursor="SizeAll"
                        HorizontalContentAlignment="Center"
                        VerticalContentAlignment="Center"/>
                 
@@ -182,7 +182,7 @@
                 <!-- 窗口调整按钮 ↘ -->
                 <Label Grid.Column="11" Name="ResizeButton" Content="" 
                        Background="Transparent" Foreground="White"
-                       FontSize="16" Cursor="Hand"
+                       FontSize="16" Cursor="SizeNWSE"
                        HorizontalContentAlignment="Center"
                        VerticalContentAlignment="Center"
                        ToolTip="拖拽调整窗口大小"/>
