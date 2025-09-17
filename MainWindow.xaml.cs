@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -97,8 +99,12 @@ namespace TrayChrome
             // 添加拖动按钮的拖拽功能
             DragButton.MouseLeftButtonDown += DragButton_MouseLeftButtonDown;
             
-            // 窗口关闭时保存设置
-            this.Closing += (sender, e) => SaveSettings();
+            // 窗口关闭时保存设置并清理资源
+            this.Closing += (sender, e) => 
+            {
+                StopMemoryCleanupTimer();
+                SaveSettings();
+            };
             
             // 启用窗口边缘调整大小功能
             this.SourceInitialized += MainWindow_SourceInitialized;
@@ -108,6 +114,9 @@ namespace TrayChrome
             
             // 初始化暗色模式按钮外观
             UpdateDarkModeButtonAppearance();
+            
+            // 启动内存清理定时器
+            StartMemoryCleanupTimer();
         }
 
         private async void InitializeWebView(string? startupUrl = null)
@@ -116,19 +125,29 @@ namespace TrayChrome
             {
                 await webView.EnsureCoreWebView2Async(null);
                 
+                // 优化WebView2设置以减少内存占用
+                var settings = webView.CoreWebView2.Settings;
+                
                 // 设置用户代理
-                webView.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
+                settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
+                
+                // 启用开发者工具
+                settings.AreDevToolsEnabled = true;
+                
+                // 禁用不必要的功能以节省内存
+                settings.IsSwipeNavigationEnabled = false;
+                settings.AreBrowserAcceleratorKeysEnabled = false;
+                settings.IsGeneralAutofillEnabled = false;
+                settings.IsPasswordAutosaveEnabled = false;
                 
                 // 应用缩放设置
                 webView.ZoomFactor = currentZoomFactor;
-                
-                // 启用开发者工具
-                webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
                 
                 // 初始化时设置浏览器外观模式
                 ApplyBrowserAppearance(isDarkMode);
                 
                 // 监听导航事件
+                webView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
                 webView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
                 webView.CoreWebView2.SourceChanged += CoreWebView2_SourceChanged;
                 
@@ -159,6 +178,29 @@ namespace TrayChrome
             });
         }
 
+        private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            // 在页面导航开始前清理前一个页面的资源
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // 立即清理前一个页面的资源
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        CleanupWebViewMemory();
+                    });
+                    
+                    // 短暂延迟确保清理完成
+                    await Task.Delay(500);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"导航前清理异常: {ex.Message}");
+                }
+            });
+        }
+
         private void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             Dispatcher.Invoke(() =>
@@ -172,6 +214,27 @@ namespace TrayChrome
                 
                 // 更新托盘图标提示
                 UpdateTrayTooltip();
+                
+                // 页面导航完成后清理内存
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // 等待页面完全加载
+                        await Task.Delay(2000);
+                        
+                        // 在UI线程中执行内存清理
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            CleanupWebViewMemory();
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        // 忽略清理过程中的异常
+                        System.Diagnostics.Debug.WriteLine($"内存清理异常: {ex.Message}");
+                    }
+                });
             });
         }
         
@@ -1033,6 +1096,167 @@ namespace TrayChrome
         }
         
         public bool IsSuperMinimalMode => isSuperMinimalMode;
+        
+        private void CleanupWebViewMemory()
+        {
+            try
+            {
+                if (webView?.CoreWebView2 != null)
+                {
+                    // 清理浏览器缓存和内存
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // 1. 清理所有类型的浏览数据
+                            await webView.CoreWebView2.Profile.ClearBrowsingDataAsync(
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.AllDomStorage |
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.AllSite |
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DiskCache |
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.Cookies |
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.BrowsingHistory |
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DownloadHistory |
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.GeneralAutofill |
+                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.PasswordAutosave
+                            );
+                            
+                            // 2. 尝试设置内存使用目标为低
+                            try
+                            {
+                                webView.CoreWebView2.MemoryUsageTargetLevel = 
+                                    Microsoft.Web.WebView2.Core.CoreWebView2MemoryUsageTargetLevel.Low;
+                            }
+                            catch (Exception memEx)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"设置内存目标异常: {memEx.Message}");
+                            }
+                            
+                            // 3. 强制垃圾回收（多次执行确保彻底清理）
+                            for (int i = 0; i < 3; i++)
+                            {
+                                GC.Collect();
+                                GC.WaitForPendingFinalizers();
+                                await Task.Delay(100); // 短暂延迟让系统处理
+                            }
+                            
+                            // 4. 尝试压缩大对象堆
+                            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                            GC.Collect();
+                            
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"清理缓存异常: {ex.Message}");
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"内存清理异常: {ex.Message}");
+            }
+        }
+        
+        private System.Windows.Threading.DispatcherTimer? memoryCleanupTimer;
+        
+        private void StartMemoryCleanupTimer()
+        {
+            // 创建定时器，每2分钟清理一次内存（更频繁的清理）
+            memoryCleanupTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(2)
+            };
+            
+            memoryCleanupTimer.Tick += (sender, e) =>
+            {
+                // 智能清理策略：根据内存使用情况决定清理强度
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // 获取当前进程内存使用情况
+                        var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                        var memoryUsage = currentProcess.WorkingSet64 / (1024 * 1024); // MB
+                        
+                        System.Diagnostics.Debug.WriteLine($"当前内存使用: {memoryUsage}MB");
+                        
+                        // 如果内存使用超过200MB，执行强力清理
+                        if (memoryUsage > 200)
+                        {
+                            System.Diagnostics.Debug.WriteLine("执行强力内存清理");
+                            await Dispatcher.InvokeAsync(() => CleanupWebViewMemory());
+                            
+                            // 如果内存使用超过400MB，考虑重置WebView环境
+                            if (memoryUsage > 400)
+                            {
+                                System.Diagnostics.Debug.WriteLine("内存使用过高，考虑重置WebView环境");
+                                await Dispatcher.InvokeAsync(async () => await ResetWebViewEnvironment());
+                            }
+                        }
+                        else
+                        {
+                            // 轻量级清理
+                            GC.Collect(0, GCCollectionMode.Optimized);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"智能清理异常: {ex.Message}");
+                    }
+                });
+            };
+            
+            memoryCleanupTimer.Start();
+        }
+        
+        private void StopMemoryCleanupTimer()
+        {
+            memoryCleanupTimer?.Stop();
+            memoryCleanupTimer = null;
+        }
+        
+        // WebView2环境重置功能 - 用于彻底清理WebView2进程
+        private async Task ResetWebViewEnvironment()
+        {
+            try
+            {
+                if (webView?.CoreWebView2 != null)
+                {
+                    // 1. 停止内存清理定时器
+                    StopMemoryCleanupTimer();
+                    
+                    // 2. 清理所有浏览数据
+                    await webView.CoreWebView2.Profile.ClearBrowsingDataAsync();
+                    
+                    // 3. 尝试关闭WebView2
+                    webView.CoreWebView2.Stop();
+                    
+                    // 4. 释放WebView2资源
+                    webView.Dispose();
+                    
+                    // 5. 强制垃圾回收
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                    
+                    // 6. 短暂延迟让系统清理进程
+                    await Task.Delay(2000);
+                    
+                    // 7. 重新初始化WebView2
+                    await webView.EnsureCoreWebView2Async();
+                    
+                    // 8. 重新启动内存清理定时器
+                    StartMemoryCleanupTimer();
+                    
+                    System.Diagnostics.Debug.WriteLine("WebView2环境重置完成");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"WebView2环境重置异常: {ex.Message}");
+            }
+        }
+        
         public bool IsAnimationEnabled => isAnimationEnabled;
     }
 
