@@ -17,6 +17,10 @@
   <ItemGroup>
     <Resource Include="Resources\Ampeross-Ampola-Chrome.ico" />
     <Resource Include="Resources\Ampeross-Ampola-Chrome.256.png" />
+    <Resource Include="Resources\alternative-icons\dingding.ico" />
+    <Resource Include="Resources\alternative-icons\feishu.ico" />
+    <Resource Include="Resources\alternative-icons\wecom.ico" />
+    <Resource Include="Resources\alternative-icons\weixin.ico" />
   </ItemGroup>
 
 </Project>

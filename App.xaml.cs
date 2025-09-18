@@ -254,6 +254,310 @@ namespace TrayChrome
             }
         }
 
+        private void SetIcon_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is string iconType)
+            {
+                try
+                {
+                    string iconPath;
+                    switch (iconType)
+                    {
+                        case "default":
+                            iconPath = "pack://application:,,,/Resources/Ampeross-Ampola-Chrome.ico";
+                            break;
+                        case "dingding":
+                            iconPath = "pack://application:,,,/Resources/alternative-icons/dingding.ico";
+                            break;
+                        case "feishu":
+                            iconPath = "pack://application:,,,/Resources/alternative-icons/feishu.ico";
+                            break;
+                        case "wecom":
+                            iconPath = "pack://application:,,,/Resources/alternative-icons/wecom.ico";
+                            break;
+                        case "weixin":
+                            iconPath = "pack://application:,,,/Resources/alternative-icons/weixin.ico";
+                            break;
+                        default:
+                            return;
+                    }
+
+                    SetApplicationIcon(iconPath);
+                    SaveIconSetting(iconType, iconPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"设置图标失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void SetCustomIcon_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 创建文件选择对话框
+                var openFileDialog = new Microsoft.Win32.OpenFileDialog();
+                
+                // 设置对话框属性
+                openFileDialog.Title = "选择图标文件";
+                openFileDialog.Filter = "图标文件 (*.ico)|*.ico|PNG图片 (*.png)|*.png|所有文件 (*.*)|*.*";
+                openFileDialog.FilterIndex = 1;
+                openFileDialog.CheckFileExists = true;
+                openFileDialog.CheckPathExists = true;
+                openFileDialog.Multiselect = false;
+                openFileDialog.RestoreDirectory = true;
+                
+                // 设置初始目录为用户的桌面
+                openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
+                // 显示对话框并获取结果
+                Window owner = null;
+                if (mainWindow != null && mainWindow.IsVisible)
+                {
+                    owner = mainWindow;
+                }
+                else
+                {
+                    // 如果主窗口不可见，尝试获取当前活动窗口
+                    owner = Application.Current.MainWindow;
+                }
+                
+                bool? dialogResult;
+                if (owner != null)
+                {
+                    dialogResult = openFileDialog.ShowDialog(owner);
+                }
+                else
+                {
+                    dialogResult = openFileDialog.ShowDialog();
+                }
+
+                if (dialogResult == true && !string.IsNullOrEmpty(openFileDialog.FileName))
+                {
+                    string selectedPath = openFileDialog.FileName;
+                    
+                    // 验证文件是否存在和可读
+                    if (!File.Exists(selectedPath))
+                    {
+                        MessageBox.Show("选择的文件不存在！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
+                    // 验证文件大小（不超过5MB）
+                    var fileInfo = new FileInfo(selectedPath);
+                    if (fileInfo.Length > 5 * 1024 * 1024)
+                    {
+                        MessageBox.Show("图标文件过大，请选择小于5MB的文件！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
+                    // 验证图标文件是否有效
+                    if (!IsValidIconFile(selectedPath))
+                    {
+                        MessageBox.Show("选择的文件不是有效的图标文件！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                    
+                    // 复制图标到应用程序目录
+                    string customIconsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "custom-icons");
+                    Directory.CreateDirectory(customIconsDir);
+                    
+                    string fileName = $"custom_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(selectedPath)}";
+                    string targetPath = Path.Combine(customIconsDir, fileName);
+                    
+                    File.Copy(selectedPath, targetPath, true);
+                    
+                    SetApplicationIcon(targetPath);
+                    SaveIconSetting("custom", targetPath);
+                    
+                    MessageBox.Show("自定义图标设置成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                // 显示详细的错误信息用于调试
+                string errorMessage = $"错误类型: {ex.GetType().Name}\n错误信息: {ex.Message}\n堆栈跟踪: {ex.StackTrace}";
+                MessageBox.Show(errorMessage, "详细错误信息", MessageBoxButton.OK, MessageBoxImage.Error);
+                
+                // 同时输出到调试控制台
+                System.Diagnostics.Debug.WriteLine($"SetCustomIcon_Click异常详情: {ex}");
+            }
+        }
+
+        private bool IsValidIconFile(string filePath)
+        {
+            try
+            {
+                string extension = Path.GetExtension(filePath).ToLower();
+                
+                if (extension == ".ico")
+                {
+                    // 尝试创建Icon对象来验证ICO文件
+                    using (var icon = new System.Drawing.Icon(filePath))
+                    {
+                        return icon.Width > 0 && icon.Height > 0;
+                    }
+                }
+                else if (extension == ".png")
+                {
+                    // 尝试创建BitmapImage来验证PNG文件
+                    var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(filePath, UriKind.Absolute);
+                    bitmap.EndInit();
+                    return bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0;
+                }
+                
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void SetApplicationIcon(string iconPath)
+        {
+            try
+            {
+                // 设置托盘图标
+                if (trayIcon != null)
+                {
+                    if (iconPath.StartsWith("pack://"))
+                    {
+                        // 使用资源图标
+                        var iconUri = new Uri(iconPath);
+                        var iconStream = Application.GetResourceStream(iconUri);
+                        if (iconStream != null)
+                        {
+                            // 需要重新创建流，因为Icon构造函数会关闭流
+                            var memoryStream = new MemoryStream();
+                            iconStream.Stream.CopyTo(memoryStream);
+                            memoryStream.Position = 0;
+                            
+                            // 释放旧图标
+                            trayIcon.Icon?.Dispose();
+                            trayIcon.Icon = new System.Drawing.Icon(memoryStream);
+                        }
+                    }
+                    else if (File.Exists(iconPath))
+                    {
+                        // 使用文件图标
+                        string extension = Path.GetExtension(iconPath).ToLower();
+                        
+                        if (extension == ".ico")
+                        {
+                            // 释放旧图标
+                            trayIcon.Icon?.Dispose();
+                            trayIcon.Icon = new System.Drawing.Icon(iconPath);
+                        }
+                        else if (extension == ".png")
+                        {
+                            // 将PNG转换为Icon
+                            using (var bitmap = new System.Drawing.Bitmap(iconPath))
+                            {
+                                var hIcon = bitmap.GetHicon();
+                                // 释放旧图标
+                                trayIcon.Icon?.Dispose();
+                                trayIcon.Icon = System.Drawing.Icon.FromHandle(hIcon);
+                            }
+                        }
+                    }
+                }
+
+                // 设置窗口图标
+                if (mainWindow != null)
+                {
+                    if (iconPath.StartsWith("pack://"))
+                    {
+                        var iconUri = new Uri(iconPath);
+                        var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
+                        bitmapImage.BeginInit();
+                        bitmapImage.UriSource = iconUri;
+                        bitmapImage.EndInit();
+                        mainWindow.Icon = bitmapImage;
+                    }
+                    else if (File.Exists(iconPath))
+                    {
+                        var iconUri = new Uri(iconPath, UriKind.Absolute);
+                        var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
+                        bitmapImage.BeginInit();
+                        bitmapImage.UriSource = iconUri;
+                        bitmapImage.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                        bitmapImage.EndInit();
+                        mainWindow.Icon = bitmapImage;
+                    }
+                }
+            }
+            catch (ArgumentException argEx)
+            {
+                MessageBox.Show($"图标文件格式不正确: {argEx.Message}", "格式错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (OutOfMemoryException)
+            {
+                MessageBox.Show("内存不足，无法加载图标文件！", "内存错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"应用图标失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void SaveIconSetting(string iconType, string iconPath)
+        {
+            try
+            {
+                string settingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome");
+                Directory.CreateDirectory(settingsDir);
+                
+                string settingsFile = Path.Combine(settingsDir, "icon-settings.json");
+                
+                var settings = new
+                {
+                    IconType = iconType,
+                    IconPath = iconPath,
+                    LastUpdated = DateTime.Now
+                };
+                
+                string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(settingsFile, json);
+            }
+            catch (Exception ex)
+            {
+                // 静默处理保存错误，不影响图标设置
+                System.Diagnostics.Debug.WriteLine($"保存图标设置失败: {ex.Message}");
+            }
+        }
+
+        private void LoadIconSetting()
+        {
+            try
+            {
+                string settingsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "icon-settings.json");
+                
+                if (File.Exists(settingsFile))
+                {
+                    string json = File.ReadAllText(settingsFile);
+                    var settings = JsonSerializer.Deserialize<JsonElement>(json);
+                    
+                    if (settings.TryGetProperty("IconPath", out var iconPathElement))
+                    {
+                        string iconPath = iconPathElement.GetString() ?? "";
+                        if (!string.IsNullOrEmpty(iconPath))
+                        {
+                            SetApplicationIcon(iconPath);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 静默处理加载错误，使用默认图标
+                System.Diagnostics.Debug.WriteLine($"加载图标设置失败: {ex.Message}");
+            }
+        }
+
         private void OnMainWindowTitleChanged(string title)
         {
             if (trayIcon != null)

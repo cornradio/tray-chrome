@@ -12,6 +12,13 @@
                 <ContextMenu>
                     <MenuItem Header="超级极简模式" Name="SuperMinimalModeMenuItem" Click="SuperMinimalMode_Click" IsCheckable="True" />
                     <MenuItem Header="启用动画" Name="AnimationMenuItem" Click="Animation_Click" IsCheckable="True" IsChecked="True" />
+                    <MenuItem Header="图标设置" Name="IconSettingsMenuItem">
+                        <MenuItem Header="默认图标" Name="DefaultIconMenuItem" Click="SetIcon_Click" Tag="default" />
+                        <MenuItem Header="钉钉" Name="DingDingIconMenuItem" Click="SetIcon_Click" Tag="dingding" />
+                        <MenuItem Header="飞书" Name="FeishuIconMenuItem" Click="SetIcon_Click" Tag="feishu" />
+                        <MenuItem Header="企业微信" Name="WecomIconMenuItem" Click="SetIcon_Click" Tag="wecom" />
+                        <MenuItem Header="微信" Name="WeixinIconMenuItem" Click="SetIcon_Click" Tag="weixin" />
+                    </MenuItem>
                     <MenuItem Header="收藏夹" Name="BookmarksMenuItem">
                         <MenuItem Header="添加到收藏夹" Click="AddBookmarkFromTray_Click"/>
                         <MenuItem Header="编辑收藏夹" Click="EditBookmarkFromTray_Click"/>
