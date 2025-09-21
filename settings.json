@@ -1,0 +1,13 @@
+{
+  "ZoomFactor": 1.0,
+  "IsMobileUA": true,
+  "WindowWidth": 360,
+  "WindowHeight": 640,
+  "IsDarkMode": false,
+  "IsTopMost": true,
+  "IsSuperMinimalMode": false,
+  "IsAnimationEnabled": true,
+  "HotKeyModifiers": 1,
+  "HotKeyVirtualKey": 88,
+  "EnableGlobalHotKey": true
+}

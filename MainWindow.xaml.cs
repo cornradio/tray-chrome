@@ -1276,5 +1276,10 @@ namespace TrayChrome
         public bool IsTopMost { get; set; } = true;
         public bool IsSuperMinimalMode { get; set; } = false;
         public bool IsAnimationEnabled { get; set; } = true;
+        
+        // 全局快捷键设置
+        public uint HotKeyModifiers { get; set; } = 1; // Alt = 1
+        public uint HotKeyVirtualKey { get; set; } = 0x58; // X键
+        public bool EnableGlobalHotKey { get; set; } = true;
     }
 }

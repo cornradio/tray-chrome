@@ -18,6 +18,11 @@ namespace TrayChrome
         private int currentInstanceId;
         private List<Bookmark> bookmarks = new List<Bookmark>();
         private string bookmarksFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "bookmarks.json");
+        
+        // 全局快捷键管理器
+        private GlobalHotKeyManager? hotKeyManager;
+        private AppSettings appSettings = new AppSettings();
+        private string settingsFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "settings.json");
 
         // 验证URL格式的辅助方法
         private bool IsValidUrl(string url)
@@ -129,6 +134,10 @@ namespace TrayChrome
             // 加载收藏夹并刷新托盘菜单
             LoadBookmarks();
             RefreshTrayBookmarkMenu();
+            
+            // 加载设置并初始化全局快捷键
+            LoadSettings();
+            InitializeGlobalHotKey();
             
             // 隐藏主窗口，只显示托盘图标
             MainWindow = mainWindow;
@@ -575,6 +584,9 @@ namespace TrayChrome
                 mainWindow.TitleChanged -= OnMainWindowTitleChanged;
             }
             
+            // 清理全局快捷键资源
+            hotKeyManager?.Dispose();
+            
             trayIcon?.Dispose();
             base.OnExit(e);
         }
@@ -914,6 +926,87 @@ namespace TrayChrome
 
             dialog.Content = grid;
             dialog.ShowDialog();
+        }
+
+        // 加载设置
+        private void LoadSettings()
+        {
+            try
+            {
+                if (File.Exists(settingsFilePath))
+                {
+                    string json = File.ReadAllText(settingsFilePath);
+                    var loadedSettings = JsonSerializer.Deserialize<AppSettings>(json);
+                    if (loadedSettings != null)
+                    {
+                        appSettings = loadedSettings;
+                    }
+                }
+                else
+                {
+                    // 创建默认设置文件
+                    SaveSettings();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"加载设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // 保存设置
+        private void SaveSettings()
+        {
+            try
+            {
+                string directory = Path.GetDirectoryName(settingsFilePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                string json = JsonSerializer.Serialize(appSettings, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(settingsFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"保存设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // 初始化全局快捷键
+        private void InitializeGlobalHotKey()
+        {
+            if (appSettings.EnableGlobalHotKey && mainWindow != null)
+            {
+                try
+                {
+                    hotKeyManager = new GlobalHotKeyManager(mainWindow);
+                    hotKeyManager.RegisterHotKey(appSettings.HotKeyModifiers, appSettings.HotKeyVirtualKey, ToggleMainWindow);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"注册全局快捷键失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+
+        // 切换主窗口显示/隐藏
+        private void ToggleMainWindow()
+        {
+            if (mainWindow != null)
+            {
+                if (mainWindow.IsVisible)
+                {
+                    mainWindow.HideWithAnimation();
+                }
+                else
+                {
+                    mainWindow.ShowWithAnimation();
+                    mainWindow.WindowState = WindowState.Normal;
+                    mainWindow.Activate();
+                }
+            }
         }
     }
 }
