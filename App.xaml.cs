@@ -7,6 +7,7 @@ using Hardcodet.Wpf.TaskbarNotification;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace TrayChrome
 {
@@ -23,6 +24,7 @@ namespace TrayChrome
         private GlobalHotKeyManager? hotKeyManager;
         private AppSettings appSettings = new AppSettings();
         private string settingsFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "settings.json");
+        private FileSystemWatcher? settingsWatcher;
 
         // 验证URL格式的辅助方法
         private bool IsValidUrl(string url)
@@ -138,6 +140,7 @@ namespace TrayChrome
             // 加载设置并初始化全局快捷键
             LoadSettings();
             InitializeGlobalHotKey();
+            InitializeSettingsWatcher();
             
             // 隐藏主窗口，只显示托盘图标
             MainWindow = mainWindow;
@@ -587,6 +590,9 @@ namespace TrayChrome
             // 清理全局快捷键资源
             hotKeyManager?.Dispose();
             
+            // 清理文件监听器
+            settingsWatcher?.Dispose();
+            
             trayIcon?.Dispose();
             base.OnExit(e);
         }
@@ -965,16 +971,90 @@ namespace TrayChrome
                     Directory.CreateDirectory(directory);
                 }
 
-                string json = JsonSerializer.Serialize(appSettings, new JsonSerializerOptions { WriteIndented = true });
+                var options = new JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+                string json = JsonSerializer.Serialize(appSettings, options);
                 File.WriteAllText(settingsFilePath, json);
+                
+                // 重新注册全局快捷键
+                ReloadGlobalHotKey();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"保存设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
+        
+        // 重新加载全局快捷键
+        private void ReloadGlobalHotKey()
+        {
+            try
+            {
+                // 先注销现有的快捷键
+                hotKeyManager?.Dispose();
+                hotKeyManager = null;
+                
+                // 重新初始化快捷键
+                InitializeGlobalHotKey();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"重新加载全局快捷键失败: {ex.Message}");
+            }
+        }
+         
+         // 初始化配置文件监听器
+         private void InitializeSettingsWatcher()
+         {
+             try
+             {
+                 string directory = Path.GetDirectoryName(settingsFilePath);
+                 if (!string.IsNullOrEmpty(directory))
+                 {
+                     settingsWatcher = new FileSystemWatcher(directory, "settings.json");
+                     settingsWatcher.Changed += OnSettingsFileChanged;
+                     settingsWatcher.EnableRaisingEvents = true;
+                 }
+             }
+             catch (Exception ex)
+             {
+                 System.Diagnostics.Debug.WriteLine($"初始化配置文件监听器失败: {ex.Message}");
+             }
+         }
+         
+         // 配置文件变化事件处理
+         private async void OnSettingsFileChanged(object sender, FileSystemEventArgs e)
+         {
+             try
+             {
+                 // 延迟一下，确保文件写入完成
+                 await Task.Delay(500);
+                 
+                 // 在UI线程中重新加载设置
+                 Dispatcher.Invoke(() =>
+                 {
+                     try
+                     {
+                         LoadSettings();
+                         ReloadGlobalHotKey();
+                         System.Diagnostics.Debug.WriteLine("配置文件已重新加载");
+                     }
+                     catch (Exception ex)
+                     {
+                         System.Diagnostics.Debug.WriteLine($"重新加载配置失败: {ex.Message}");
+                     }
+                 });
+             }
+             catch (Exception ex)
+             {
+                 System.Diagnostics.Debug.WriteLine($"处理配置文件变化事件失败: {ex.Message}");
+             }
+         }
 
-        // 初始化全局快捷键
+         // 初始化全局快捷键
         private void InitializeGlobalHotKey()
         {
             if (appSettings.EnableGlobalHotKey && mainWindow != null)

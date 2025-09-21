@@ -700,7 +700,12 @@ namespace TrayChrome
                 appSettings.IsSuperMinimalMode = isSuperMinimalMode;
                 appSettings.IsAnimationEnabled = isAnimationEnabled;
                 
-                var json = JsonSerializer.Serialize(appSettings, new JsonSerializerOptions { WriteIndented = true });
+                var options = new JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+                var json = JsonSerializer.Serialize(appSettings, options);
                 File.WriteAllText(settingsFilePath, json);
             }
             catch (Exception ex)
@@ -1278,8 +1283,47 @@ namespace TrayChrome
         public bool IsAnimationEnabled { get; set; } = true;
         
         // 全局快捷键设置
-        public uint HotKeyModifiers { get; set; } = 1; // Alt = 1
-        public uint HotKeyVirtualKey { get; set; } = 0x58; // X键
+        public string Hotkey { get; set; } = "alt + x";
         public bool EnableGlobalHotKey { get; set; } = true;
+        
+        // 内部使用的快捷键解析属性
+        public uint HotKeyModifiers 
+        { 
+            get 
+            {
+                if (string.IsNullOrEmpty(Hotkey)) return 1;
+                var lower = Hotkey.ToLower();
+                uint modifiers = 0;
+                if (lower.Contains("alt")) modifiers |= 1;
+                if (lower.Contains("ctrl") || lower.Contains("control")) modifiers |= 2;
+                if (lower.Contains("shift")) modifiers |= 4;
+                if (lower.Contains("win") || lower.Contains("windows")) modifiers |= 8;
+                return modifiers == 0 ? 1 : modifiers; // 默认Alt
+            }
+        }
+        
+        public uint HotKeyVirtualKey 
+        { 
+            get 
+            {
+                if (string.IsNullOrEmpty(Hotkey)) return 0x58;
+                var lower = Hotkey.ToLower();
+                // 提取最后一个字符作为按键
+                var parts = lower.Split(new char[] { '+', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 0)
+                {
+                    var key = parts[parts.Length - 1].Trim();
+                    if (key.Length == 1)
+                    {
+                        char c = key[0];
+                        if (c >= 'a' && c <= 'z')
+                        {
+                            return (uint)(c - 'a' + 0x41); // A-Z键码
+                        }
+                    }
+                }
+                return 0x58; // 默认X键
+            }
+        }
     }
 }
