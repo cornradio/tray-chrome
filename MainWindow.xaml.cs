@@ -51,10 +51,21 @@ namespace TrayChrome
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
 
-        public MainWindow(string? startupUrl = null, bool useCleanMode = false, bool forceUncleanMode = false)
+        public MainWindow(string? startupUrl = null, bool useCleanMode = false, bool forceUncleanMode = false, double? customWidth = null, double? customHeight = null)
         {
             InitializeComponent();
             LoadSettings();
+            
+            // 应用自定义窗口大小（如果提供）
+            if (customWidth.HasValue && customHeight.HasValue)
+            {
+                this.Width = customWidth.Value;
+                this.Height = customHeight.Value;
+                
+                // 同时更新设置中的窗口大小，以便保存
+                appSettings.WindowWidth = customWidth.Value;
+                appSettings.WindowHeight = customHeight.Value;
+            }
             
             // 处理超级极简模式设置的优先级：
             // 1. 如果指定了 --unclean，强制禁用超级极简模式

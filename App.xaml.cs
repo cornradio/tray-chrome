@@ -33,6 +33,31 @@ namespace TrayChrome
                    && (result.Scheme == Uri.UriSchemeHttp || result.Scheme == Uri.UriSchemeHttps);
         }
 
+        // 解析窗口大小的辅助方法
+        private bool TryParseSize(string sizeValue, out double width, out double height)
+        {
+            width = 0;
+            height = 0;
+            
+            if (string.IsNullOrEmpty(sizeValue))
+                return false;
+                
+            string[] parts = sizeValue.Split('x', 'X', '*');
+            if (parts.Length != 2)
+                return false;
+                
+            if (double.TryParse(parts[0], out width) && double.TryParse(parts[1], out height))
+            {
+                // 验证尺寸范围
+                if (width >= 200 && width <= 3840 && height >= 150 && height <= 2160)
+                {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
@@ -46,6 +71,8 @@ namespace TrayChrome
             bool shouldUseCleanMode = false; // 默认不使用超级简洁模式
             bool shouldForceUncleanMode = false; // 是否强制禁用超级极简模式
             bool shouldShowHelp = false; // 是否显示帮助信息
+            double? customWidth = null; // 自定义窗口宽度
+            double? customHeight = null; // 自定义窗口高度
             
             if (e.Args.Length > 0)
             {
@@ -85,6 +112,27 @@ namespace TrayChrome
                     {
                         shouldShowHelp = true;
                     }
+                    // 支持 --size=480x320 格式
+                    else if (arg.StartsWith("--size=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string sizeValue = arg.Substring(7);
+                        if (TryParseSize(sizeValue, out double width, out double height))
+                        {
+                            customWidth = width;
+                            customHeight = height;
+                        }
+                    }
+                    // 支持 --size 480x320 格式
+                    else if (arg.Equals("--size", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+                    {
+                        string sizeValue = e.Args[i + 1];
+                        if (TryParseSize(sizeValue, out double width, out double height))
+                        {
+                            customWidth = width;
+                            customHeight = height;
+                        }
+                        i++; // 跳过下一个参数，因为已经作为size使用了
+                    }
                     // 支持直接传入URL（如果看起来像URL）
                     else if (IsValidUrl(arg))
                     {
@@ -111,7 +159,7 @@ namespace TrayChrome
             }
             
             // 创建主窗口，传入启动参数
-            mainWindow = new MainWindow(startupUrl, shouldUseCleanMode, shouldForceUncleanMode);
+            mainWindow = new MainWindow(startupUrl, shouldUseCleanMode, shouldForceUncleanMode, customWidth, customHeight);
             
             // 根据 --open 参数决定是否显示窗口
             if (shouldOpen)
@@ -945,6 +993,12 @@ $Shortcut.Save()
   --unclean            强制禁用超级极简模式（显示底部工具栏）
                        用于覆盖之前保存的超级极简模式设置
                        
+  --size <宽度x高度>    指定窗口大小
+                       格式: --size 480x320
+                       或: --size=800x600
+                       支持的分隔符: x, X, *
+                       尺寸范围: 宽度200-3840，高度150-2160
+
   --help, -h           显示此帮助信息
 
 示例:
@@ -954,6 +1008,7 @@ $Shortcut.Save()
   TrayChrome.exe --url https://jandan.net --open --clean
   TrayChrome.exe --unclean
   TrayChrome.exe https://github.com
+  TrayChrome.exe --size 480x320 --url https://www.baidu.com --open
 
 功能说明:
   • 左键点击托盘图标：显示/隐藏窗口

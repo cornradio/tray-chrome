@@ -37,6 +37,7 @@ and you can have mutiple of it.
 | `--clean` | 启用超级极简模式（隐藏工具栏） | `--clean` |
 | `--unclean` | 强制禁用超级极简模式 | `--unclean` |
 | `--help` 或 `-h` | 显示帮助信息 | `--help` |
+| `--size <宽度x高度>` | 指定窗口大小 | `--size 800x600` |
 
 ### 使用示例
 
