@@ -798,12 +798,28 @@ namespace TrayChrome
                      throw new Exception("无法获取应用程序路径");
                  }
                  
+                 // 获取当前窗口大小
+                 string sizeArgument = "";
+                 if (mainWindow != null)
+                 {
+                     // 获取当前窗口的实际大小（四舍五入到整数）
+                     int currentWidth = (int)Math.Round(mainWindow.ActualWidth);
+                     int currentHeight = (int)Math.Round(mainWindow.ActualHeight);
+                     
+                     // 确保尺寸在有效范围内
+                     if (currentWidth >= 200 && currentWidth <= 3840 && 
+                         currentHeight >= 150 && currentHeight <= 2160)
+                     {
+                         sizeArgument = $" --size {currentWidth}x{currentHeight}";
+                     }
+                 }
+                 
                  // 使用PowerShell创建Windows快捷方式
                  string psScript = $@"
 $WshShell = New-Object -comObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut('{shortcutPath.Replace("'", "''")}')
 $Shortcut.TargetPath = '{appPath.Replace("'", "''")}'
-$Shortcut.Arguments = '--url ""{url}"" --open'
+$Shortcut.Arguments = '--url ""{url}"" --open{sizeArgument}'
 $Shortcut.Description = 'TrayChrome - {title.Replace("'", "''")}'
 $Shortcut.IconLocation = '{appPath.Replace("'", "''")}' + ',0'
 $Shortcut.WorkingDirectory = '{Path.GetDirectoryName(appPath)?.Replace("'", "''")}'
