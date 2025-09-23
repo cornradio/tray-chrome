@@ -648,6 +648,146 @@ namespace TrayChrome
             }
         }
 
+        private void CreateDesktopShortcut_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 获取当前页面的URL
+                string currentUrl = GetCurrentPageUrl();
+                if (string.IsNullOrEmpty(currentUrl))
+                {
+                    MessageBox.Show("无法获取当前页面URL，请确保页面已加载完成。", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // 获取当前页面的标题
+                string pageTitle = GetCurrentPageTitle();
+                if (string.IsNullOrEmpty(pageTitle))
+                {
+                    pageTitle = "网页快捷方式";
+                }
+
+                // 创建桌面快捷方式
+                CreateDesktopShortcut(currentUrl, pageTitle);
+                
+                MessageBox.Show($"桌面快捷方式 \"{pageTitle}\" 创建成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"创建桌面快捷方式失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private string GetCurrentPageUrl()
+        {
+            try
+            {
+                if (mainWindow?.webView?.CoreWebView2 != null)
+                {
+                    return mainWindow.webView.CoreWebView2.Source;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"获取当前页面URL失败: {ex.Message}");
+            }
+            return string.Empty;
+        }
+
+        private string GetCurrentPageTitle()
+        {
+            try
+            {
+                if (mainWindow?.webView?.CoreWebView2 != null)
+                {
+                    return mainWindow.webView.CoreWebView2.DocumentTitle;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"获取当前页面标题失败: {ex.Message}");
+            }
+            return string.Empty;
+        }
+
+        private void CreateDesktopShortcut(string url, string title)
+         {
+             try
+             {
+                 // 获取桌面路径
+                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                 
+                 // 清理文件名中的非法字符
+                 string fileName = title;
+                 char[] invalidChars = Path.GetInvalidFileNameChars();
+                 foreach (char c in invalidChars)
+                 {
+                     fileName = fileName.Replace(c, '_');
+                 }
+                 
+                 // 限制文件名长度
+                 if (fileName.Length > 50)
+                 {
+                     fileName = fileName.Substring(0, 50);
+                 }
+                 
+                 string shortcutPath = Path.Combine(desktopPath, $"{fileName}.lnk");
+                 
+                 // 如果文件已存在，添加数字后缀
+                 int counter = 1;
+                 string originalPath = shortcutPath;
+                 while (System.IO.File.Exists(shortcutPath))
+                 {
+                     string nameWithoutExt = Path.GetFileNameWithoutExtension(originalPath);
+                     shortcutPath = Path.Combine(desktopPath, $"{nameWithoutExt}({counter}).lnk");
+                     counter++;
+                 }
+                 
+                 // 获取当前应用程序的路径
+                 string appPath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                 if (string.IsNullOrEmpty(appPath))
+                 {
+                     throw new Exception("无法获取应用程序路径");
+                 }
+                 
+                 // 使用PowerShell创建Windows快捷方式
+                 string psScript = $@"
+$WshShell = New-Object -comObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut('{shortcutPath.Replace("'", "''")}')
+$Shortcut.TargetPath = '{appPath.Replace("'", "''")}'
+$Shortcut.Arguments = '--url ""{url}"" --open'
+$Shortcut.Description = 'TrayChrome - {title.Replace("'", "''")}'
+$Shortcut.IconLocation = '{appPath.Replace("'", "''")}' + ',0'
+$Shortcut.WorkingDirectory = '{Path.GetDirectoryName(appPath)?.Replace("'", "''")}'
+$Shortcut.Save()
+";
+                 
+                 ProcessStartInfo psi = new ProcessStartInfo
+                 {
+                     FileName = "powershell.exe",
+                     Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{psScript.Replace("\"", "\\\"")}\"",
+                     UseShellExecute = false,
+                     CreateNoWindow = true,
+                     RedirectStandardOutput = true,
+                     RedirectStandardError = true
+                 };
+                 
+                 using (Process process = Process.Start(psi))
+                 {
+                     process?.WaitForExit();
+                     if (process?.ExitCode != 0)
+                     {
+                         string error = process.StandardError.ReadToEnd();
+                         throw new Exception($"PowerShell执行失败: {error}");
+                     }
+                 }
+             }
+             catch (Exception ex)
+             {
+                 throw new Exception($"创建快捷方式文件失败: {ex.Message}");
+             }
+         }
+
         private void LoadBookmarks()
         {
             try
