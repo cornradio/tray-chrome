@@ -33,8 +33,8 @@ namespace TrayChrome
         private const int HTBOTTOMRIGHT = 17;
         
         private List<Bookmark> bookmarks = new List<Bookmark>();
-        private string bookmarksFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "bookmarks.json");
-        private string settingsFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "settings.json");
+        private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
+        private string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
         private bool isBookmarkPanelVisible = false;
         private bool isMobileUA = true;
         private const string MobileUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
@@ -128,6 +128,43 @@ namespace TrayChrome
             
             // 启动内存清理定时器
             StartMemoryCleanupTimer();
+        }
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.L)
+            {
+                AddressBar.Focus();
+                AddressBar.SelectAll();
+                e.Handled = true;
+                return;
+            }
+
+            if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == (ModifierKeys.Control | ModifierKeys.Shift)
+                && e.Key == Key.O)
+            {
+                try
+                {
+                    // 在书签按钮下方显示书签菜单
+                    if (BookmarkContextMenu != null && BookmarkButton != null)
+                    {
+                        BookmarkContextMenu.PlacementTarget = BookmarkButton;
+                        BookmarkContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+                        BookmarkContextMenu.IsOpen = true;
+                        e.Handled = true;
+                        return;
+                    }
+                }
+                catch { }
+            }
+
+            if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == (ModifierKeys.Control | ModifierKeys.Shift)
+                && e.Key == Key.B)
+            {
+                ToggleSuperMinimalMode(!isSuperMinimalMode);
+                e.Handled = true;
+                return;
+            }
         }
 
         private async void InitializeWebView(string? startupUrl = null)

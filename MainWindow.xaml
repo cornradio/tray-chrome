@@ -11,7 +11,8 @@
         Topmost="True"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="Transparent">
+        Background="Transparent"
+        PreviewKeyDown="Window_PreviewKeyDown">
     
     <Window.Resources>
         <!-- 自定义按钮样式 -->
@@ -85,7 +86,7 @@
                          Background="#444" Foreground="#FFFFFF" 
                          BorderThickness="0" BorderBrush="#888"
                          Margin="0,3,5,3" Padding="8,5" 
-                         Text="https://www.google.com"
+                         Text="https://tva.cornradio.org/?name=search"
                          KeyDown="AddressBar_KeyDown"
                          FontSize="10"
                          FontWeight="Normal"
@@ -98,7 +99,7 @@
         </Border>
         
         <!-- WebView2 浏览器控件 -->
-        <wv2:WebView2 Grid.Row="1" Name="webView" Source="https://www.google.com"/>
+        <wv2:WebView2 Grid.Row="1" Name="webView" Source="https://tva.cornradio.org/?name=search"/>
         
         <!-- 底部功能按钮栏 -->
         <Border Grid.Row="2" Name="BottomToolbar" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">

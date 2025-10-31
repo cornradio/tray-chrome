@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Windows.Input;
 
 namespace TrayChrome
 {
@@ -18,12 +19,12 @@ namespace TrayChrome
         private static int instanceCounter = 0;
         private int currentInstanceId;
         private List<Bookmark> bookmarks = new List<Bookmark>();
-        private string bookmarksFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "bookmarks.json");
+        private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
         
         // 全局快捷键管理器
         private GlobalHotKeyManager? hotKeyManager;
         private AppSettings appSettings = new AppSettings();
-        private string settingsFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "settings.json");
+        private string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
         private FileSystemWatcher? settingsWatcher;
 
         // 验证URL格式的辅助方法
@@ -235,8 +236,24 @@ namespace TrayChrome
 
         private void TrayIcon_TrayMiddleMouseUp(object sender, RoutedEventArgs e)
         {
-            // 鼠标中键点击关闭实例
-            Application.Current.Shutdown();
+            // Ctrl + 中键：增加实例；普通中键：不做操作
+            try
+            {
+                if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+                {
+                    string currentExecutable = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                    if (!string.IsNullOrEmpty(currentExecutable))
+                    {
+                        Process.Start(currentExecutable);
+                    }
+                }else{
+                    Application.Current.Shutdown();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"启动新实例失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void RestartInstance_Click(object sender, RoutedEventArgs e)
@@ -568,10 +585,7 @@ namespace TrayChrome
         {
             try
             {
-                string settingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome");
-                Directory.CreateDirectory(settingsDir);
-                
-                string settingsFile = Path.Combine(settingsDir, "icon-settings.json");
+                string settingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon-settings.json");
                 
                 var settings = new
                 {
@@ -594,7 +608,7 @@ namespace TrayChrome
         {
             try
             {
-                string settingsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TrayChrome", "icon-settings.json");
+                string settingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon-settings.json");
                 
                 if (File.Exists(settingsFile))
                 {
@@ -723,6 +737,22 @@ namespace TrayChrome
             catch (Exception ex)
             {
                 MessageBox.Show($"创建桌面快捷方式失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenGithub_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://github.com/cornradio/tray-chrome",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开 GitHub 链接失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

@@ -10,7 +10,7 @@
                         TrayMiddleMouseUp="TrayIcon_TrayMiddleMouseUp">
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="超级极简模式" Name="SuperMinimalModeMenuItem" Click="SuperMinimalMode_Click" IsCheckable="True" />
+                    <MenuItem Header="极简模式" Name="SuperMinimalModeMenuItem" Click="SuperMinimalMode_Click" IsCheckable="True" />
                     <MenuItem Header="启用动画" Name="AnimationMenuItem" Click="Animation_Click" IsCheckable="True" IsChecked="True" />
                     <MenuItem Header="图标设置" Name="IconSettingsMenuItem">
                         <MenuItem Header="默认图标" Name="DefaultIconMenuItem" Click="SetIcon_Click" Tag="default" />
@@ -26,6 +26,7 @@
                     </MenuItem>
                     <Separator />
                     <MenuItem Header="创建桌面快捷方式" Click="CreateDesktopShortcut_Click" />
+                    <MenuItem Header="GitHub" Click="OpenGithub_Click" />
                     <Separator />
                     <MenuItem Header="增加实例" Click="AddInstance_Click" />
                     <MenuItem Header="重启实例" Click="RestartInstance_Click" />
