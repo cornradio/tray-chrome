@@ -32,8 +32,8 @@ and you can have mutiple of it.
 
 | 快捷键                     | 功能                         |
 |---------------------------|------------------------------|
-| `中键`                | 关闭 TrayChrome 实例          |
-| `Ctrl + 中键`                | 关闭当前实例                  |
+| `中键(tray icon)`                | 关闭 TrayChrome 实例          |
+| `Ctrl + 中键(tray icon)`                | 关闭当前实例                  |
 | `Ctrl + L`                | 聚焦到地址栏      |
 | `Ctrl + R`                | 刷新当前页面                  |
 | `Ctrl +Shift + O`      | 书签                   |
