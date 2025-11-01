@@ -38,8 +38,8 @@ and you can have mutiple of it.
 | `Ctrl + R`                | 刷新当前页面                  |
 | `Ctrl +Shift + O`      | 书签                   |
 | `Ctrl +Shift + B`                 | 切换极简模式（Clean 模式）  |
+| `Ctrl + 点击链接` |在新窗口中打开
 
-> 注: 某些快捷键需主窗口为焦点。您也可以在设置中自定义部分全局热键。
 
 
 
@@ -108,21 +108,19 @@ and you can have mutiple of it.
 - **管理收藏**：点击 "open bookmark.json" 编辑收藏夹json文件(删除收藏)
 - **快速访问**：收藏夹菜单中直接点击网站名称
 
-## 🎯 交互操作
-
-### 键盘快捷键
-- **Enter**：地址栏中确认导航
-- **Ctrl + 点击链接**：在新窗口中打开
-- **win + 方向键** ： 快速调整尺寸
 
 ## 📁 文件存储
 
-应用程序数据存储在：
+new： 应用程序数据存储在traychrome.exe同目录下
+
+old： 应用程序数据存储在：
 ```
 %APPDATA%\TrayChrome\
 ├── bookmarks.json    # 收藏夹数据
 └── settings.json     # 应用设置
 ```
+
+
 
 ## 🛠️ 技术栈
 
