@@ -47,6 +47,7 @@ namespace TrayChrome
         private bool isTopMost = true; // 默认置顶
         private bool isSuperMinimalMode = false; // 超级极简模式状态
         private bool isAnimationEnabled = true; // 动画启用状态
+        private bool hasSavedPosition = false; // 是否存在保存的位置
         
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
@@ -494,10 +495,13 @@ namespace TrayChrome
         {
             base.OnSourceInitialized(e);
             
-            // 设置窗口位置到屏幕右下角
-            var workingArea = SystemParameters.WorkArea;
-            Left = workingArea.Right - Width - 20;
-            Top = workingArea.Bottom - Height - 20;
+            // 如果没有保存的位置，才基于当前屏幕工作区定位
+            if (!hasSavedPosition)
+            {
+                var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
+                Left = workingArea.Right - Width - 20;
+                Top = workingArea.Bottom - Height - 20;
+            }
         }
 
         // 防止窗口在任务栏显示
@@ -527,15 +531,18 @@ namespace TrayChrome
 
         private void SetupWindowAnimation()
         {
-            // 初始化窗口位置到屏幕下方
-            var workingArea = SystemParameters.WorkArea;
-            Left = workingArea.Right - Width - 20;
+            // 初始化窗口位置到当前屏幕下方（不改变Left，仅调整Top）
+            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
+            if (!hasSavedPosition)
+            {
+                Left = workingArea.Right - Width - 20;
+            }
             Top = workingArea.Bottom + 50; // 隐藏在屏幕下方
         }
 
         public void ShowWithAnimation()
         {
-            var workingArea = SystemParameters.WorkArea;
+            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
             var targetTop = workingArea.Bottom - Height - 20;
             
             Show();
@@ -557,14 +564,12 @@ namespace TrayChrome
                 EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseOut } // 使用自定义流畅缓动函数
             };
             
-
-            
             BeginAnimation(TopProperty, animation);
         }
 
         public void HideWithAnimation()
         {
-            var workingArea = SystemParameters.WorkArea;
+            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
             
             // 检查是否应该禁用动画
             if (SystemAnimationHelper.ShouldDisableAnimation(isAnimationEnabled))
@@ -581,8 +586,6 @@ namespace TrayChrome
                 Duration = TimeSpan.FromMilliseconds(100), // 隐藏动画更快一些
                 EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseIn } // 使用自定义流畅缓动函数
             };
-            
-
             
             animation.Completed += (s, e) => Hide();
             BeginAnimation(TopProperty, animation);
@@ -727,6 +730,14 @@ namespace TrayChrome
                 isTopMost = appSettings.IsTopMost;
                 isSuperMinimalMode = appSettings.IsSuperMinimalMode;
                 isAnimationEnabled = appSettings.IsAnimationEnabled;
+                
+                // 位置（如果有保存）
+                if (appSettings.WindowLeft.HasValue && appSettings.WindowTop.HasValue)
+                {
+                    this.Left = appSettings.WindowLeft.Value;
+                    this.Top = appSettings.WindowTop.Value;
+                    hasSavedPosition = true;
+                }
             }
             catch (Exception ex)
             {
@@ -747,6 +758,8 @@ namespace TrayChrome
                 appSettings.IsTopMost = isTopMost;
                 appSettings.IsSuperMinimalMode = isSuperMinimalMode;
                 appSettings.IsAnimationEnabled = isAnimationEnabled;
+                appSettings.WindowLeft = this.Left;
+                appSettings.WindowTop = this.Top;
                 
                 var options = new JsonSerializerOptions 
                 { 
@@ -1109,6 +1122,34 @@ namespace TrayChrome
             return IntPtr.Zero;
         }
         
+        private Rect GetCurrentScreenWorkingAreaInWpfUnits()
+        {
+            try
+            {
+                var handle = new WindowInteropHelper(this).Handle;
+                var screen = System.Windows.Forms.Screen.FromHandle(handle);
+                var wa = screen.WorkingArea; // 像素坐标
+                
+                var source = PresentationSource.FromVisual(this);
+                if (source?.CompositionTarget != null)
+                {
+                    var transform = source.CompositionTarget.TransformFromDevice;
+                    var topLeft = transform.Transform(new System.Windows.Point(wa.Left, wa.Top));
+                    var bottomRight = transform.Transform(new System.Windows.Point(wa.Right, wa.Bottom));
+                    return new Rect(topLeft, bottomRight);
+                }
+                
+                // 回退：假设96 DPI
+                return new Rect(wa.Left, wa.Top, wa.Width, wa.Height);
+            }
+            catch
+            {
+                // 回退到主屏工作区
+                var wa = SystemParameters.WorkArea;
+                return new Rect(wa.Left, wa.Top, wa.Width, wa.Height);
+            }
+        }
+        
         public void ToggleSuperMinimalMode(bool enabled)
         {
             isSuperMinimalMode = enabled;
@@ -1325,6 +1366,8 @@ namespace TrayChrome
         public bool IsMobileUA { get; set; } = true;
         public double WindowWidth { get; set; } = 360;
         public double WindowHeight { get; set; } = 640;
+        public double? WindowLeft { get; set; }
+        public double? WindowTop { get; set; }
         public bool IsDarkMode { get; set; } = false;
         public bool IsTopMost { get; set; } = true;
         public bool IsSuperMinimalMode { get; set; } = false;
