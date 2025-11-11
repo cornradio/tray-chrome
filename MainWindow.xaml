@@ -64,7 +64,7 @@
         </Grid.RowDefinitions>
         
         <!-- 顶部地址栏 -->
-        <Border Grid.Row="0" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Name="TopToolbar" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="35"/>

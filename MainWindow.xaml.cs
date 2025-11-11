@@ -1158,24 +1158,32 @@ namespace TrayChrome
             {
                 // 隐藏底部工具栏
                 BottomToolbar.Visibility = Visibility.Collapsed;
+                // 隐藏顶部工具栏
+                TopToolbar.Visibility = Visibility.Collapsed;
                 
                 // 让WebView2占用整个可用空间，将底部行高度设为0
                 var mainGrid = (Grid)BottomToolbar.Parent;
                 if (mainGrid != null && mainGrid.RowDefinitions.Count >= 3)
                 {
                     mainGrid.RowDefinitions[2].Height = new GridLength(0);
+                    // 同时将顶部行高度设为0
+                    mainGrid.RowDefinitions[0].Height = new GridLength(0);
                 }
             }
             else
             {
                 // 显示底部工具栏
                 BottomToolbar.Visibility = Visibility.Visible;
+                // 显示顶部工具栏
+                TopToolbar.Visibility = Visibility.Visible;
                 
                 // 恢复底部工具栏的高度
                 var mainGrid = (Grid)BottomToolbar.Parent;
                 if (mainGrid != null && mainGrid.RowDefinitions.Count >= 3)
                 {
                     mainGrid.RowDefinitions[2].Height = new GridLength(40);
+                    // 恢复顶部工具栏高度（默认35）
+                    mainGrid.RowDefinitions[0].Height = new GridLength(35);
                 }
             }
             
