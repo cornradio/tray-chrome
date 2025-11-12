@@ -531,34 +531,52 @@ namespace TrayChrome
 
         private void SetupWindowAnimation()
         {
-            // 初始化窗口位置到当前屏幕下方（不改变Left，仅调整Top）
+            // 初始化窗口位置到当前屏幕下方（不改变 Left，仅调整 Top）
             var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
-            if (!hasSavedPosition)
-            {
-                Left = workingArea.Right - Width - 20;
-            }
             Top = workingArea.Bottom + 50; // 隐藏在屏幕下方
         }
 
         public void ShowWithAnimation()
         {
-            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
-            var targetTop = workingArea.Bottom - Height - 20;
-            
+            // 先显示窗口，使得 DPI/可视化源可用
             Show();
             Activate(); // 确保窗口获得焦点
+            
+            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
+            
+            // 期望位置：右下角，留 20 边距
+            double targetLeft = Left;
+            // 如果 Left 还未设置，使用默认右下角
+            if (double.IsNaN(targetLeft) || double.IsInfinity(targetLeft))
+            {
+                targetLeft = workingArea.Right - Width - 20;
+            }
+            double targetTop = workingArea.Bottom - Height - 20;
+            
+            // 钳制到当前屏幕工作区（考虑边距）
+            double minLeft = workingArea.Left;
+            double maxLeft = workingArea.Right - Width - 20;
+            if (maxLeft < minLeft) maxLeft = minLeft; // 防御：窗口宽度大于工作区
+            targetLeft = Math.Max(minLeft, Math.Min(targetLeft, maxLeft));
+            
+            double minTop = workingArea.Top;
+            double maxTop = workingArea.Bottom - Height - 20;
+            if (maxTop < minTop) maxTop = minTop; // 防御：窗口高度大于工作区
+            targetTop = Math.Max(minTop, Math.Min(targetTop, maxTop));
+            
+            Left = targetLeft;
             
             // 检查是否应该禁用动画
             if (SystemAnimationHelper.ShouldDisableAnimation(isAnimationEnabled))
             {
-                // 直接设置位置，不使用动画
+                // 直接设置最终位置
                 Top = targetTop;
                 return;
             }
             
             var animation = new DoubleAnimation
             {
-                From = workingArea.Bottom + 50,
+                From = Top, // 使用当前 Top 作为动画起点（通常为屏幕底部外 50）
                 To = targetTop,
                 Duration = TimeSpan.FromMilliseconds(100), // 缩短动画时间，提升流畅度
                 EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseOut } // 使用自定义流畅缓动函数
