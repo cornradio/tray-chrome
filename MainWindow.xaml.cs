@@ -173,7 +173,71 @@ namespace TrayChrome
         {
             try
             {
-                await webView.EnsureCoreWebView2Async(null);
+                // 检查 WebView2 是否已经初始化
+                if (webView.CoreWebView2 != null)
+                {
+                    // 如果已经初始化，直接使用现有实例
+                    System.Diagnostics.Debug.WriteLine("WebView2 已经初始化，跳过环境创建");
+                }
+                else
+                {
+                    // 创建环境选项以启用 FluentOverlay 滚动条
+                    var options = new CoreWebView2EnvironmentOptions();
+                    
+                    // 尝试设置 FluentOverlay 滚动条
+                    try
+                    {
+                        // 使用反射检查并设置 ScrollBarStyle 属性（较新版本的 WebView2 SDK 支持）
+                        var optionsType = typeof(CoreWebView2EnvironmentOptions);
+                        var scrollBarStyleProperty = optionsType.GetProperty("ScrollBarStyle");
+                        if (scrollBarStyleProperty != null)
+                        {
+                            // 获取枚举类型并设置值
+                            var enumType = scrollBarStyleProperty.PropertyType;
+                            var fluentOverlayValue = Enum.Parse(enumType, "FluentOverlay");
+                            scrollBarStyleProperty.SetValue(options, fluentOverlayValue);
+                            System.Diagnostics.Debug.WriteLine("已设置 ScrollBarStyle 为 FluentOverlay");
+                        }
+                        else
+                        {
+                            // 如果属性不存在，使用浏览器标志方式
+                            var additionalBrowserArgumentsProperty = optionsType.GetProperty("AdditionalBrowserArguments");
+                            if (additionalBrowserArgumentsProperty != null)
+                            {
+                                var currentArgs = additionalBrowserArgumentsProperty.GetValue(options) as string ?? "";
+                                var newArgs = string.IsNullOrEmpty(currentArgs) 
+                                    ? "--enable-features=msEdgeFluentOverlayScrollbar" 
+                                    : currentArgs + " --enable-features=msEdgeFluentOverlayScrollbar";
+                                additionalBrowserArgumentsProperty.SetValue(options, newArgs);
+                                System.Diagnostics.Debug.WriteLine("已使用浏览器标志启用 FluentOverlay 滚动条");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // 如果设置失败，尝试使用浏览器标志作为备选方案
+                        System.Diagnostics.Debug.WriteLine($"设置 FluentOverlay 滚动条失败，尝试使用浏览器标志: {ex.Message}");
+                        try
+                        {
+                            var optionsType = typeof(CoreWebView2EnvironmentOptions);
+                            var additionalBrowserArgumentsProperty = optionsType.GetProperty("AdditionalBrowserArguments");
+                            if (additionalBrowserArgumentsProperty != null)
+                            {
+                                var currentArgs = additionalBrowserArgumentsProperty.GetValue(options) as string ?? "";
+                                var newArgs = string.IsNullOrEmpty(currentArgs) 
+                                    ? "--enable-features=msEdgeFluentOverlayScrollbar" 
+                                    : currentArgs + " --enable-features=msEdgeFluentOverlayScrollbar";
+                                additionalBrowserArgumentsProperty.SetValue(options, newArgs);
+                                System.Diagnostics.Debug.WriteLine("已使用浏览器标志启用 FluentOverlay 滚动条（备选方案）");
+                            }
+                        }
+                        catch { }
+                    }
+                    
+                    // 创建环境并初始化 WebView2（在第一次调用时传入自定义环境）
+                    var environment = await CoreWebView2Environment.CreateAsync(null, null, options);
+                    await webView.EnsureCoreWebView2Async(environment);
+                }
                 
                 // 优化WebView2设置以减少内存占用
                 var settings = webView.CoreWebView2.Settings;
@@ -210,12 +274,13 @@ namespace TrayChrome
                 // 初始化广告拦截器（在 CoreWebView2 准备好后）
                 InitializeAdBlocker();
                 
-                // 如果提供了启动URL，导航到该URL
-                if (!string.IsNullOrEmpty(startupUrl))
-                {
-                    webView.CoreWebView2.Navigate(startupUrl);
-                    AddressBar.Text = startupUrl;
-                }
+                // 导航到启动URL或默认URL
+                string urlToNavigate = !string.IsNullOrEmpty(startupUrl) 
+                    ? startupUrl 
+                    : "https://tva.cornradio.org/?name=search";
+                
+                webView.CoreWebView2.Navigate(urlToNavigate);
+                AddressBar.Text = urlToNavigate;
             }
             catch (Exception ex)
             {
@@ -290,6 +355,7 @@ namespace TrayChrome
                 });
             });
         }
+        
         
         private void CoreWebView2_DocumentTitleChanged(object? sender, object e)
         {

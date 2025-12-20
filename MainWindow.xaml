@@ -99,7 +99,7 @@
         </Border>
         
         <!-- WebView2 浏览器控件 -->
-        <wv2:WebView2 Grid.Row="1" Name="webView" Source="https://tva.cornradio.org/?name=search"/>
+        <wv2:WebView2 Grid.Row="1" Name="webView"/>
         
         <!-- 底部功能按钮栏 -->
         <Border Grid.Row="2" Name="BottomToolbar" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">
