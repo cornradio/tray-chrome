@@ -1493,6 +1493,63 @@ namespace TrayChrome
         
         public bool IsAdBlockEnabled => adBlocker.IsEnabled;
         
+        public void ApplySettings(AppSettings settings)
+        {
+            try
+            {
+                // 应用缩放
+                currentZoomFactor = settings.ZoomFactor;
+                if (webView?.CoreWebView2 != null)
+                {
+                    webView.ZoomFactor = currentZoomFactor;
+                }
+                
+                // 应用UA
+                isMobileUA = settings.IsMobileUA;
+                if (webView?.CoreWebView2 != null)
+                {
+                    webView.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
+                    UAButton.Content = isMobileUA ? "▯" : "🖳";
+                    UAButton.ToolTip = isMobileUA ? "切换用户代理 (当前: 手机)" : "切换用户代理 (当前: 桌面)";
+                }
+                
+                // 应用暗色模式
+                isDarkMode = settings.IsDarkMode;
+                ApplyBrowserAppearance(isDarkMode);
+                UpdateDarkModeButtonAppearance();
+                
+                // 应用置顶
+                isTopMost = settings.IsTopMost;
+                this.Topmost = isTopMost;
+                UpdateTopMostButtonAppearance();
+                
+                // 应用极简模式
+                isSuperMinimalMode = settings.IsSuperMinimalMode;
+                ToggleSuperMinimalMode(isSuperMinimalMode);
+                
+                // 应用动画
+                isAnimationEnabled = settings.IsAnimationEnabled;
+                
+                // 应用广告拦截
+                adBlocker.IsEnabled = settings.IsAdBlockEnabled;
+                if (settings.AdBlockRules != null && settings.AdBlockRules.Count > 0)
+                {
+                    adBlocker.BlockRules = settings.AdBlockRules;
+                }
+                if (settings.AdAllowRules != null)
+                {
+                    adBlocker.AllowRules = settings.AdAllowRules;
+                }
+                
+                // 保存设置
+                SaveSettings();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"应用设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         public void ShowAdBlockSettings()
         {
             var dialog = new Window

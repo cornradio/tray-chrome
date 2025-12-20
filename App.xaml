@@ -13,22 +13,10 @@
                     <MenuItem Header="极简模式" Name="SuperMinimalModeMenuItem" Click="SuperMinimalMode_Click" IsCheckable="True" />
                     <MenuItem Header="启用动画" Name="AnimationMenuItem" Click="Animation_Click" IsCheckable="True" IsChecked="True" />
                     <MenuItem Header="广告拦截" Name="AdBlockMenuItem" Click="AdBlock_Click" IsCheckable="True" />
-                    <MenuItem Header="广告拦截设置" Click="AdBlockSettings_Click" />
-                    <MenuItem Header="图标设置" Name="IconSettingsMenuItem">
-                        <MenuItem Header="默认图标" Name="DefaultIconMenuItem" Click="SetIcon_Click" Tag="default" />
-                        <MenuItem Header="钉钉" Name="DingDingIconMenuItem" Click="SetIcon_Click" Tag="dingding" />
-                        <MenuItem Header="飞书" Name="FeishuIconMenuItem" Click="SetIcon_Click" Tag="feishu" />
-                        <MenuItem Header="企业微信" Name="WecomIconMenuItem" Click="SetIcon_Click" Tag="wecom" />
-                        <MenuItem Header="微信" Name="WeixinIconMenuItem" Click="SetIcon_Click" Tag="weixin" />
-                    </MenuItem>
-                    <MenuItem Header="收藏夹" Name="BookmarksMenuItem">
-                        <MenuItem Header="添加到收藏夹" Click="AddBookmarkFromTray_Click"/>
-                        <MenuItem Header="编辑收藏夹" Click="EditBookmarkFromTray_Click"/>
-                        <Separator />
-                    </MenuItem>
+                    <Separator />
+                    <MenuItem Header="设置" Click="OpenSettings_Click" />
                     <Separator />
                     <MenuItem Header="创建桌面快捷方式" Click="CreateDesktopShortcut_Click" />
-                    <MenuItem Header="GitHub" Click="OpenGithub_Click" />
                     <Separator />
                     <MenuItem Header="增加实例" Click="AddInstance_Click" />
                     <MenuItem Header="重启实例" Click="RestartInstance_Click" />

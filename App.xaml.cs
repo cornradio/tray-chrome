@@ -325,6 +325,57 @@ namespace TrayChrome
                 UpdateAdBlockMenuState();
             }
         }
+
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (mainWindow != null)
+                {
+                    // 确保主窗口已经显示过（即使现在是隐藏的），这样才能设置Owner
+                    if (!mainWindow.IsLoaded)
+                    {
+                        mainWindow.Show();
+                        mainWindow.Hide();
+                    }
+                    
+                    var settingsWindow = new SettingsWindow(appSettings, mainWindow, this);
+                    // 订阅收藏夹更新事件
+                    settingsWindow.BookmarksUpdated += OnBookmarksUpdated;
+                    // 订阅窗口关闭事件，在关闭时更新设置
+                    settingsWindow.Closed += (s, args) =>
+                    {
+                        // 对于非模态窗口，使用SettingsSaved属性来判断是否保存了设置
+                        if (settingsWindow.SettingsSaved)
+                        {
+                            // 设置已保存，重新加载全局快捷键
+                            ReloadGlobalHotKey();
+                            // 更新菜单状态
+                            UpdateSuperMinimalModeMenuState();
+                            UpdateAnimationMenuState();
+                            UpdateAdBlockMenuState();
+                        }
+                        // 取消订阅事件
+                        settingsWindow.BookmarksUpdated -= OnBookmarksUpdated;
+                    };
+                    // 使用非模态窗口，不阻塞主线程
+                    settingsWindow.Show();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开设置窗口失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OnBookmarksUpdated(object? sender, EventArgs e)
+        {
+            // 重新加载收藏夹并刷新托盘菜单
+            LoadBookmarks();
+            RefreshTrayBookmarkMenu();
+            // 同时更新主窗口的收藏夹菜单
+            mainWindow?.RefreshBookmarkMenu();
+        }
         
         private void UpdateAdBlockMenuState()
         {
@@ -365,9 +416,19 @@ namespace TrayChrome
             }
         }
 
-        private void SetIcon_Click(object sender, RoutedEventArgs e)
+        public void SetIcon_Click(object? sender, RoutedEventArgs? e)
         {
-            if (sender is MenuItem menuItem && menuItem.Tag is string iconType)
+            string? iconType = null;
+            if (sender is MenuItem menuItem && menuItem.Tag is string tag)
+            {
+                iconType = tag;
+            }
+            else if (sender is RadioButton radioButton && radioButton.Tag is string radioTag)
+            {
+                iconType = radioTag;
+            }
+            
+            if (!string.IsNullOrEmpty(iconType))
             {
                 try
                 {
@@ -528,7 +589,7 @@ namespace TrayChrome
             }
         }
 
-        private void SetApplicationIcon(string iconPath)
+        public void SetApplicationIcon(string iconPath)
         {
             try
             {
@@ -615,7 +676,7 @@ namespace TrayChrome
             }
         }
 
-        private void SaveIconSetting(string iconType, string iconPath)
+        public void SaveIconSetting(string iconType, string iconPath)
         {
             try
             {
