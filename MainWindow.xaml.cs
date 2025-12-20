@@ -48,6 +48,7 @@ namespace TrayChrome
         private bool isSuperMinimalMode = false; // 超级极简模式状态
         private bool isAnimationEnabled = true; // 动画启用状态
         private bool hasSavedPosition = false; // 是否存在保存的位置
+        private AdBlocker adBlocker = new AdBlocker(); // 广告拦截器
         
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
@@ -205,6 +206,9 @@ namespace TrayChrome
                 
                 // 拦截新窗口打开请求，在当前窗口中打开
                 webView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
+                
+                // 初始化广告拦截器（在 CoreWebView2 准备好后）
+                InitializeAdBlocker();
                 
                 // 如果提供了启动URL，导航到该URL
                 if (!string.IsNullOrEmpty(startupUrl))
@@ -749,6 +753,21 @@ namespace TrayChrome
                 isSuperMinimalMode = appSettings.IsSuperMinimalMode;
                 isAnimationEnabled = appSettings.IsAnimationEnabled;
                 
+                // 广告拦截设置
+                if (appSettings.AdBlockRules != null && appSettings.AdBlockRules.Count > 0)
+                {
+                    adBlocker.BlockRules = appSettings.AdBlockRules;
+                }
+                else
+                {
+                    adBlocker.LoadDefaultRules();
+                }
+                if (appSettings.AdAllowRules != null)
+                {
+                    adBlocker.AllowRules = appSettings.AdAllowRules;
+                }
+                adBlocker.IsEnabled = appSettings.IsAdBlockEnabled;
+                
                 // 位置（如果有保存）
                 if (appSettings.WindowLeft.HasValue && appSettings.WindowTop.HasValue)
                 {
@@ -778,6 +797,9 @@ namespace TrayChrome
                 appSettings.IsAnimationEnabled = isAnimationEnabled;
                 appSettings.WindowLeft = this.Left;
                 appSettings.WindowTop = this.Top;
+                appSettings.IsAdBlockEnabled = adBlocker.IsEnabled;
+                appSettings.AdBlockRules = adBlocker.BlockRules;
+                appSettings.AdAllowRules = adBlocker.AllowRules;
                 
                 var options = new JsonSerializerOptions 
                 { 
@@ -1365,7 +1387,10 @@ namespace TrayChrome
                     // 7. 重新初始化WebView2
                     await webView.EnsureCoreWebView2Async();
                     
-                    // 8. 重新启动内存清理定时器
+                    // 8. 重新初始化广告拦截器
+                    InitializeAdBlocker();
+                    
+                    // 9. 重新启动内存清理定时器
                     StartMemoryCleanupTimer();
                     
                     System.Diagnostics.Debug.WriteLine("WebView2环境重置完成");
@@ -1378,6 +1403,171 @@ namespace TrayChrome
         }
         
         public bool IsAnimationEnabled => isAnimationEnabled;
+        
+        private void InitializeAdBlocker()
+        {
+            try
+            {
+                if (webView?.CoreWebView2 != null)
+                {
+                    adBlocker.Initialize(webView.CoreWebView2);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"初始化广告拦截器失败: {ex.Message}");
+            }
+        }
+        
+        public void ToggleAdBlock(bool enabled)
+        {
+            adBlocker.IsEnabled = enabled;
+            SaveSettings();
+        }
+        
+        public bool IsAdBlockEnabled => adBlocker.IsEnabled;
+        
+        public void ShowAdBlockSettings()
+        {
+            var dialog = new Window
+            {
+                Title = "广告拦截设置",
+                Width = 600,
+                Height = 500,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.CanResize
+            };
+
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // 启用开关
+            var enableCheckBox = new CheckBox
+            {
+                Content = "启用广告拦截",
+                IsChecked = adBlocker.IsEnabled,
+                Margin = new Thickness(10, 10, 10, 5)
+            };
+            enableCheckBox.Checked += (s, e) => { adBlocker.IsEnabled = true; SaveSettings(); };
+            enableCheckBox.Unchecked += (s, e) => { adBlocker.IsEnabled = false; SaveSettings(); };
+            Grid.SetRow(enableCheckBox, 0);
+            grid.Children.Add(enableCheckBox);
+
+            // 拦截规则标签
+            var blockLabel = new Label
+            {
+                Content = "拦截规则（每行一个，支持通配符 * 和域名匹配）：",
+                Margin = new Thickness(10, 5, 10, 5)
+            };
+            Grid.SetRow(blockLabel, 1);
+            grid.Children.Add(blockLabel);
+
+            // 拦截规则文本框
+            var blockTextBox = new TextBox
+            {
+                AcceptsReturn = true,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(10, 0, 10, 5),
+                FontFamily = new FontFamily("Consolas")
+            };
+            blockTextBox.Text = string.Join("\r\n", adBlocker.BlockRules);
+            Grid.SetRow(blockTextBox, 2);
+            grid.Children.Add(blockTextBox);
+
+            // 允许规则标签
+            var allowLabel = new Label
+            {
+                Content = "允许规则（白名单，优先级高于拦截规则）：",
+                Margin = new Thickness(10, 5, 10, 5)
+            };
+            Grid.SetRow(allowLabel, 3);
+            grid.Children.Add(allowLabel);
+
+            // 允许规则文本框
+            var allowTextBox = new TextBox
+            {
+                AcceptsReturn = true,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(10, 0, 10, 5),
+                FontFamily = new FontFamily("Consolas")
+            };
+            allowTextBox.Text = string.Join("\r\n", adBlocker.AllowRules);
+            Grid.SetRow(allowTextBox, 4);
+            grid.Children.Add(allowTextBox);
+
+            // 按钮面板
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(10, 10, 10, 10)
+            };
+            Grid.SetRow(buttonPanel, 5);
+
+            var loadDefaultButton = new Button
+            {
+                Content = "加载默认规则",
+                Width = 120,
+                Height = 30,
+                Margin = new Thickness(5, 0, 5, 0)
+            };
+            loadDefaultButton.Click += (s, e) =>
+            {
+                adBlocker.LoadDefaultRules();
+                blockTextBox.Text = string.Join("\r\n", adBlocker.BlockRules);
+            };
+
+            var okButton = new Button
+            {
+                Content = "确定",
+                Width = 80,
+                Height = 30,
+                Margin = new Thickness(5, 0, 5, 0)
+            };
+            okButton.Click += (s, e) =>
+            {
+                adBlocker.BlockRules = blockTextBox.Text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(r => r.Trim())
+                    .Where(r => !string.IsNullOrEmpty(r))
+                    .ToList();
+                adBlocker.AllowRules = allowTextBox.Text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(r => r.Trim())
+                    .Where(r => !string.IsNullOrEmpty(r))
+                    .ToList();
+                SaveSettings();
+                dialog.DialogResult = true;
+                dialog.Close();
+            };
+
+            var cancelButton = new Button
+            {
+                Content = "取消",
+                Width = 80,
+                Height = 30,
+                Margin = new Thickness(5, 0, 5, 0)
+            };
+            cancelButton.Click += (s, e) =>
+            {
+                dialog.DialogResult = false;
+                dialog.Close();
+            };
+
+            buttonPanel.Children.Add(loadDefaultButton);
+            buttonPanel.Children.Add(okButton);
+            buttonPanel.Children.Add(cancelButton);
+            grid.Children.Add(buttonPanel);
+
+            dialog.Content = grid;
+            dialog.ShowDialog();
+        }
     }
 
     public class Bookmark
@@ -1398,6 +1588,11 @@ namespace TrayChrome
         public bool IsTopMost { get; set; } = true;
         public bool IsSuperMinimalMode { get; set; } = false;
         public bool IsAnimationEnabled { get; set; } = true;
+        
+        // 广告拦截设置
+        public bool IsAdBlockEnabled { get; set; } = false;
+        public List<string> AdBlockRules { get; set; } = new List<string>();
+        public List<string> AdAllowRules { get; set; } = new List<string>();
         
         // 全局快捷键设置
         public string Hotkey { get; set; } = "alt + x";

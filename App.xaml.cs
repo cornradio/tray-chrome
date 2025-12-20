@@ -181,6 +181,7 @@ namespace TrayChrome
             // 更新托盘菜单中超级极简模式的状态
             UpdateSuperMinimalModeMenuState();
             UpdateAnimationMenuState();
+            UpdateAdBlockMenuState();
             
             // 加载收藏夹并刷新托盘菜单
             LoadBookmarks();
@@ -302,6 +303,39 @@ namespace TrayChrome
                 mainWindow.ToggleAnimation(menuItem.IsChecked);
                 
                 UpdateAnimationMenuState();
+            }
+        }
+
+        private void AdBlock_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && mainWindow != null)
+            {
+                // 切换广告拦截
+                mainWindow.ToggleAdBlock(menuItem.IsChecked);
+                
+                UpdateAdBlockMenuState();
+            }
+        }
+
+        private void AdBlockSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (mainWindow != null)
+            {
+                mainWindow.ShowAdBlockSettings();
+                UpdateAdBlockMenuState();
+            }
+        }
+        
+        private void UpdateAdBlockMenuState()
+        {
+            if (trayIcon?.ContextMenu != null && mainWindow != null)
+            {
+                var menuItem = trayIcon.ContextMenu.Items.OfType<MenuItem>()
+                    .FirstOrDefault(item => item.Name == "AdBlockMenuItem");
+                if (menuItem != null)
+                {
+                    menuItem.IsChecked = mainWindow.IsAdBlockEnabled;
+                }
             }
         }
         

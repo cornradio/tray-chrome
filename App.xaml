@@ -12,6 +12,8 @@
                 <ContextMenu>
                     <MenuItem Header="极简模式" Name="SuperMinimalModeMenuItem" Click="SuperMinimalMode_Click" IsCheckable="True" />
                     <MenuItem Header="启用动画" Name="AnimationMenuItem" Click="Animation_Click" IsCheckable="True" IsChecked="True" />
+                    <MenuItem Header="广告拦截" Name="AdBlockMenuItem" Click="AdBlock_Click" IsCheckable="True" />
+                    <MenuItem Header="广告拦截设置" Click="AdBlockSettings_Click" />
                     <MenuItem Header="图标设置" Name="IconSettingsMenuItem">
                         <MenuItem Header="默认图标" Name="DefaultIconMenuItem" Click="SetIcon_Click" Tag="default" />
                         <MenuItem Header="钉钉" Name="DingDingIconMenuItem" Click="SetIcon_Click" Tag="dingding" />
