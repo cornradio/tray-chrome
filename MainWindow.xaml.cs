@@ -13,6 +13,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Markup;
 using Microsoft.Web.WebView2.Core;
 
 namespace TrayChrome
@@ -127,6 +128,8 @@ namespace TrayChrome
             
             // 初始化暗色模式按钮外观
             UpdateDarkModeButtonAppearance();
+            // 应用UI外观
+            UpdateUIAppearance(isDarkMode);
             
             // 启动内存清理定时器
             StartMemoryCleanupTimer();
@@ -259,6 +262,8 @@ namespace TrayChrome
                 
                 // 初始化时设置浏览器外观模式
                 ApplyBrowserAppearance(isDarkMode);
+                // 应用UI外观
+                UpdateUIAppearance(isDarkMode);
                 
                 // 监听导航事件
                 webView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
@@ -443,6 +448,178 @@ namespace TrayChrome
              }
          }
          
+         private void UpdateUIAppearance(bool darkMode)
+         {
+             try
+             {
+                 var buttonForeground = darkMode 
+                     ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White)
+                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x66, 0x66, 0x66)); // 灰色
+                 
+                 if (darkMode)
+                 {
+                     // 暗色模式
+                     if (TopToolbar != null)
+                     {
+                         TopToolbar.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x3C, 0x3C, 0x3C));
+                         TopToolbar.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x55, 0x55, 0x55));
+                     }
+                     
+                     if (BottomToolbar != null)
+                     {
+                         BottomToolbar.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x3C, 0x3C, 0x3C));
+                         BottomToolbar.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x55, 0x55, 0x55));
+                     }
+                     
+                     if (AddressBar != null)
+                     {
+                         AddressBar.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x44, 0x44, 0x44));
+                         AddressBar.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
+                     }
+                     
+                     if (HamburgerMenu != null)
+                     {
+                         HamburgerMenu.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
+                     }
+                     
+                     if (DragButton != null)
+                     {
+                         DragButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
+                     }
+                     
+                     if (ResizeButton != null)
+                     {
+                         ResizeButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
+                     }
+                 }
+                 else
+                 {
+                     // 亮色模式 - 雅灰白色
+                     if (TopToolbar != null)
+                     {
+                         TopToolbar.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF5, 0xF5, 0xF5));
+                         TopToolbar.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD0, 0xD0, 0xD0));
+                     }
+                     
+                     if (BottomToolbar != null)
+                     {
+                         BottomToolbar.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF5, 0xF5, 0xF5));
+                         BottomToolbar.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD0, 0xD0, 0xD0));
+                     }
+                     
+                     if (AddressBar != null)
+                     {
+                         AddressBar.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
+                         AddressBar.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
+                     }
+                     
+                     if (HamburgerMenu != null)
+                     {
+                         HamburgerMenu.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
+                     }
+                     
+                     if (DragButton != null)
+                     {
+                         DragButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
+                     }
+                     
+                     if (ResizeButton != null)
+                     {
+                         ResizeButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
+                     }
+                 }
+                 
+                 // 更新所有工具栏按钮的颜色
+                 UpdateButtonColors(darkMode, buttonForeground);
+             }
+             catch (Exception ex)
+             {
+                 System.Diagnostics.Debug.WriteLine($"更新UI外观失败: {ex.Message}");
+             }
+         }
+         
+         private void UpdateButtonColors(bool darkMode, System.Windows.Media.Brush foreground)
+         {
+             try
+             {
+                 // 定义所有工具栏按钮
+                 var buttons = new[]
+                 {
+                     CloseButton, BackButton, ForwardButton, RefreshButton, BookmarkButton,
+                     DarkModeButton, PopupButton, UAButton, TopMostButton, ZoomOutButton, ZoomInButton
+                 };
+                 
+                 // 创建新的样式，根据暗色/亮色模式设置不同的悬停和按下颜色
+                 var hoverBackground = darkMode 
+                     ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x55, 0x55, 0x55))
+                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE0, 0xE0, 0xE0));
+                 
+                 var pressedBackground = darkMode
+                     ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x66, 0x66, 0x66))
+                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD0, 0xD0, 0xD0));
+                 
+                 var pressedForeground = darkMode
+                     ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xDD, 0xDD, 0xDD))
+                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
+                 
+                 var disabledForeground = darkMode
+                     ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x88, 0x88, 0x88))
+                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xAA, 0xAA, 0xAA));
+                 
+                 foreach (var button in buttons)
+                 {
+                     if (button != null)
+                     {
+                         button.Foreground = foreground;
+                         
+                         // 创建新的样式
+                         var newStyle = new Style(typeof(Button));
+                         newStyle.Setters.Add(new Setter(Button.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
+                         newStyle.Setters.Add(new Setter(Button.ForegroundProperty, foreground));
+                         newStyle.Setters.Add(new Setter(Button.BorderThicknessProperty, new Thickness(0)));
+                         newStyle.Setters.Add(new Setter(Button.FontSizeProperty, 16.0));
+                         newStyle.Setters.Add(new Setter(Button.CursorProperty, System.Windows.Input.Cursors.Hand));
+                         
+                         // 创建模板
+                         var template = new ControlTemplate(typeof(Button));
+                         var border = new FrameworkElementFactory(typeof(Border));
+                         border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+                         border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+                         border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+                         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(3));
+                         
+                         var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
+                         contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                         contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+                         border.AppendChild(contentPresenter);
+                         template.VisualTree = border;
+                         
+                         // 添加触发器
+                         var hoverTrigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+                         hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty, hoverBackground));
+                         newStyle.Triggers.Add(hoverTrigger);
+                         
+                         var pressedTrigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
+                         pressedTrigger.Setters.Add(new Setter(Button.BackgroundProperty, pressedBackground));
+                         pressedTrigger.Setters.Add(new Setter(Button.ForegroundProperty, pressedForeground));
+                         newStyle.Triggers.Add(pressedTrigger);
+                         
+                         var disabledTrigger = new Trigger { Property = Button.IsEnabledProperty, Value = false };
+                         disabledTrigger.Setters.Add(new Setter(Button.ForegroundProperty, disabledForeground));
+                         newStyle.Triggers.Add(disabledTrigger);
+                         
+                         newStyle.Setters.Add(new Setter(Button.TemplateProperty, template));
+                         
+                         button.Style = newStyle;
+                     }
+                 }
+             }
+             catch (Exception ex)
+             {
+                 System.Diagnostics.Debug.WriteLine($"更新按钮颜色失败: {ex.Message}");
+             }
+         }
+         
          private void UpdateTopMostButtonAppearance()
          {
              if (TopMostButton != null)
@@ -515,6 +692,7 @@ namespace TrayChrome
             isDarkMode = !isDarkMode;
             ApplyBrowserAppearance(isDarkMode);
             UpdateDarkModeButtonAppearance();
+            UpdateUIAppearance(isDarkMode);
             SaveSettings();
             
             // 刷新当前页面以立即应用外观模式
@@ -818,6 +996,8 @@ namespace TrayChrome
                 isTopMost = appSettings.IsTopMost;
                 isSuperMinimalMode = appSettings.IsSuperMinimalMode;
                 isAnimationEnabled = appSettings.IsAnimationEnabled;
+                
+                // 应用UI外观（需要在WebView初始化后调用，所以延迟到InitializeWebView之后）
                 
                 // 广告拦截设置
                 if (appSettings.AdBlockRules != null && appSettings.AdBlockRules.Count > 0)
@@ -1517,6 +1697,7 @@ namespace TrayChrome
                 isDarkMode = settings.IsDarkMode;
                 ApplyBrowserAppearance(isDarkMode);
                 UpdateDarkModeButtonAppearance();
+                UpdateUIAppearance(isDarkMode);
                 
                 // 应用置顶
                 isTopMost = settings.IsTopMost;
