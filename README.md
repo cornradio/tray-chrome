@@ -5,11 +5,15 @@
 
 <img width="1536" height="864" alt="image" src="https://github.com/user-attachments/assets/580e94d7-baa8-4b27-9025-1b3205ab0b65" />
 
-left click drag , right click resize.
+左键拖拽,右键调整大小。
 ![PixPin_2025-09-16_00-23-42](https://github.com/user-attachments/assets/bdcb9626-7e16-4dc2-b085-0f298e28353b)
 
-and you can have mutiple of it.
+你也可以多开实例。
 ![PixPin_2025-09-16_00-24-16](https://github.com/user-attachments/assets/f4532983-d1fb-4ff5-bed4-042e2966772b)
+
+一个实用场景举例：快捷使用 icoud 提醒事项
+<img width="1719" height="1480" alt="image" src="https://github.com/user-attachments/assets/97b34cae-c8ff-4cf8-9d42-9ff529f7e186" />
+
 
 ## ✨ 主要特性
 
@@ -20,13 +24,11 @@ and you can have mutiple of it.
 - 🌙 **暗色模式**：支持网页暗色模式切换
 - 📌 **窗口置顶**：可设置窗口始终保持在最前面
 - ⭐ **收藏夹管理**：本地收藏夹存储和管理
+- 📢 **去广告功能**：简单的自定义去广告规则。
 
-## 🚀 启动参数
 
-### 基本用法
-双击exe启动
-
-### 快捷键说明滚
+## 用法
+双击启动，ctrl+中键开启新窗口，中键托盘图标退出。
 
 #### 快捷键说明
 
@@ -40,9 +42,7 @@ and you can have mutiple of it.
 | `Ctrl +Shift + B`                 | 切换极简模式（Clean 模式）  |
 | `Ctrl + 点击链接` |在新窗口中打开
 
-
-
-
+注：极简模式下，没有拖动窗口位置，需要借助第三方工具如altsnap来拖动窗口
 
 ### 参数说明
 ```bash
@@ -58,7 +58,7 @@ and you can have mutiple of it.
 | `--help` 或 `-h` | 显示帮助信息 | `--help` |
 | `--size <宽度x高度>` | 指定窗口大小 | `--size 800x600` |
 
-### 使用示例
+### 参数使用示例
 
 ```bash
 # 启动极简模式jandan.net
@@ -105,20 +105,15 @@ and you can have mutiple of it.
 ### 收藏夹功能
 
 - **添加收藏**：点击收藏夹按钮 → "添加到收藏夹"
-- **管理收藏**：点击 "open bookmark.json" 编辑收藏夹json文件(删除收藏)
+- **管理收藏**：在设置中有一个管理收藏夹的功能，或者点击 "open bookmark.json" 编辑收藏夹json文件(删除收藏)
 - **快速访问**：收藏夹菜单中直接点击网站名称
 
 
 ## 📁 文件存储
 
-new： 应用程序数据存储在traychrome.exe同目录下
+应用程序数据存储在traychrome.exe同目录下，理论上是编写绿色软件。
 
-old： 应用程序数据存储在：
-```
-%APPDATA%\TrayChrome\
-├── bookmarks.json    # 收藏夹数据
-└── settings.json     # 应用设置
-```
+但是其他电脑上不一定又dotnet环境。
 
 
 
