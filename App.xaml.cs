@@ -293,6 +293,11 @@ namespace TrayChrome
             Application.Current.Shutdown();
         }
 
+        private void ResetWindowPosition_Click(object sender, RoutedEventArgs e)
+        {
+            mainWindow?.ResetWindowPosition();
+        }
+
         private void SuperMinimalMode_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem menuItem && mainWindow != null)

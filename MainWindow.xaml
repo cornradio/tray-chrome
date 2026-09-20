@@ -51,12 +51,12 @@
     </Window.Resources>
     
     <!-- 外层容器，用于创建阴影效果 -->
-    <Border Background="#2D2D30" CornerRadius="8" Margin="10">
+    <Border Name="MainBorder" Background="#2D2D30" CornerRadius="8" Margin="10">
         <Border.Effect>
             <DropShadowEffect Color="Black" Direction="0" ShadowDepth="0" Opacity="0.6" BlurRadius="15"/>
         </Border.Effect>
-        
-        <Grid>
+
+        <Grid Name="MainContentGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="35"/>
             <RowDefinition Height="*"/>

@@ -38,7 +38,14 @@ namespace TrayChrome
         private const int HTBOTTOM = 15;
         private const int HTBOTTOMLEFT = 16;
         private const int HTBOTTOMRIGHT = 17;
-        
+
+        // 用于给 WebView2 原生窗口设置圆角区域（解决 WPF 裁剪对 HwndHost 无效的问题）
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
+
         private List<Bookmark> bookmarks = new List<Bookmark>();
         private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
         private string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
@@ -55,6 +62,8 @@ namespace TrayChrome
         private bool isSuperMinimalMode = false; // 超级极简模式状态
         private bool isAnimationEnabled = true; // 动画启用状态
         private bool hasSavedPosition = false; // 是否存在保存的位置
+        private double lastVisibleLeft = double.NaN; // 上次隐藏前的可见位置
+        private double lastVisibleTop = double.NaN;
         private AdBlocker adBlocker = new AdBlocker(); // 广告拦截器
         
         // 历史记录追踪
@@ -96,8 +105,7 @@ namespace TrayChrome
             
             InitializeWebView(startupUrl);
             LoadBookmarks();
-            SetupWindowAnimation();
-            
+
             // 设置初始置顶状态
             this.Topmost = isTopMost;
             UpdateTopMostButtonAppearance();
@@ -141,7 +149,12 @@ namespace TrayChrome
             UpdateDarkModeButtonAppearance();
             // 应用UI外观
             UpdateUIAppearance(isDarkMode);
-            
+
+            // 应用圆角设置（随窗口尺寸变化重新裁剪）
+            MainContentGrid.SizeChanged += (s, e) => ApplyRoundedCorners();
+            webView.SizeChanged += (s, e) => ApplyRoundedCorners();
+            ApplyRoundedCorners();
+
             // 启动内存清理定时器
             StartMemoryCleanupTimer();
             
@@ -727,6 +740,69 @@ namespace TrayChrome
              }
          }
 
+        private void ApplyRoundedCorners()
+        {
+            if (MainBorder == null || MainContentGrid == null) return;
+
+            double radius = appSettings.EnableRoundedCorners ? appSettings.CornerRadiusPx : 0;
+            if (radius < 0) radius = 0;
+
+            MainBorder.CornerRadius = new CornerRadius(radius);
+            MainBorder.BorderThickness = new Thickness(0);
+            MainBorder.BorderBrush = null;
+
+            // 裁剪内容到圆角，保证 WPF 元素（工具栏等）四周呈现圆角
+            MainContentGrid.Clip = (radius > 0 && MainContentGrid.ActualWidth > 0 && MainContentGrid.ActualHeight > 0)
+                ? new RectangleGeometry(new Rect(0, 0, MainContentGrid.ActualWidth, MainContentGrid.ActualHeight), radius, radius)
+                : null;
+
+            // WebView2 是原生窗口，无法被 WPF 裁剪，需单独设置原生圆角区域
+            ApplyWebViewRoundedCorners();
+        }
+
+        private void ApplyWebViewRoundedCorners()
+        {
+            if (webView == null) return;
+
+            IntPtr hWnd;
+            try { hWnd = webView.Handle; }
+            catch { return; }
+
+            if (hWnd == IntPtr.Zero) return;
+
+            // 仅在极简模式（无工具栏、WebView 撑满窗口）下需要对 WebView 做圆角
+            double radius = appSettings.EnableRoundedCorners ? appSettings.CornerRadiusPx : 0;
+            bool applyToWebView = isSuperMinimalMode && radius > 0;
+
+            if (!applyToWebView)
+            {
+                SetWindowRgn(hWnd, IntPtr.Zero, true);
+                return;
+            }
+
+            double dpiScaleX = 1.0;
+            double dpiScaleY = 1.0;
+            try
+            {
+                var dpi = VisualTreeHelper.GetDpi(webView);
+                dpiScaleX = dpi.DpiScaleX;
+                dpiScaleY = dpi.DpiScaleY;
+            }
+            catch { }
+
+            int width = (int)Math.Ceiling(webView.ActualWidth * dpiScaleX);
+            int height = (int)Math.Ceiling(webView.ActualHeight * dpiScaleY);
+            int r = (int)Math.Ceiling(radius * dpiScaleX);
+
+            if (width <= 0 || height <= 0 || r <= 0) return;
+
+            IntPtr region = CreateRoundRectRgn(0, 0, width + 1, height + 1, r * 2, r * 2);
+            if (region == IntPtr.Zero) return;
+
+            // SetWindowRgn 成功后系统拥有该 region，不能再 DeleteObject
+            SetWindowRgn(hWnd, region, true);
+        }
+
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
             if (webView.CoreWebView2?.CanGoBack == true)
@@ -1015,84 +1091,139 @@ namespace TrayChrome
             }
         }
 
-        private void SetupWindowAnimation()
-        {
-            // 初始化窗口位置到当前屏幕下方（不改变 Left，仅调整 Top）
-            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
-            Top = workingArea.Bottom + 50; // 隐藏在屏幕下方
-        }
-
         public void ShowWithAnimation()
         {
-            // 先显示窗口，使得 DPI/可视化源可用
-            Show();
-            Activate(); // 确保窗口获得焦点
-            
             var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
-            
-            // 期望位置：右下角，留 20 边距
-            double targetLeft = Left;
-            // 如果 Left 还未设置，使用默认右下角
+
+            // 目标位置：优先恢复上次隐藏前的位置，其次使用当前 Left/Top，最后默认右下角
+            double targetLeft = lastVisibleLeft;
+            double targetTop = lastVisibleTop;
+
             if (double.IsNaN(targetLeft) || double.IsInfinity(targetLeft))
-            {
+                targetLeft = Left;
+            if (double.IsNaN(targetTop) || double.IsInfinity(targetTop))
+                targetTop = Top;
+
+            if (double.IsNaN(targetLeft) || double.IsInfinity(targetLeft))
                 targetLeft = workingArea.Right - Width - 20;
-            }
-            double targetTop = workingArea.Bottom - Height - 20;
-            
-            // 钳制到当前屏幕工作区（考虑边距）
+            if (double.IsNaN(targetTop) || double.IsInfinity(targetTop) || targetTop >= workingArea.Bottom)
+                targetTop = workingArea.Bottom - Height - 20;
+
+            // 钳制到当前屏幕工作区，允许任意位置但保证不出屏幕
             double minLeft = workingArea.Left;
-            double maxLeft = workingArea.Right - Width - 20;
+            double maxLeft = workingArea.Right - Width;
             if (maxLeft < minLeft) maxLeft = minLeft; // 防御：窗口宽度大于工作区
             targetLeft = Math.Max(minLeft, Math.Min(targetLeft, maxLeft));
-            
+
             double minTop = workingArea.Top;
-            double maxTop = workingArea.Bottom - Height - 20;
+            double maxTop = workingArea.Bottom - Height;
             if (maxTop < minTop) maxTop = minTop; // 防御：窗口高度大于工作区
             targetTop = Math.Max(minTop, Math.Min(targetTop, maxTop));
-            
+
+            // 先清除可能残留的动画，避免旧动画值覆盖位置
+            BeginAnimation(TopProperty, null);
+            BeginAnimation(LeftProperty, null);
+
             Left = targetLeft;
-            
+
             // 检查是否应该禁用动画
             if (SystemAnimationHelper.ShouldDisableAnimation(isAnimationEnabled))
             {
-                // 直接设置最终位置
                 Top = targetTop;
+                Show();
+                Activate();
                 return;
             }
-            
+
+            // 从屏幕下方滑入到目标位置
+            double startTop = workingArea.Bottom + 50;
+            Top = startTop;
+            Show();
+            Activate();
+
             var animation = new DoubleAnimation
             {
-                From = Top, // 使用当前 Top 作为动画起点（通常为屏幕底部外 50）
+                From = startTop,
                 To = targetTop,
-                Duration = TimeSpan.FromMilliseconds(100), // 缩短动画时间，提升流畅度
-                EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseOut } // 使用自定义流畅缓动函数
+                Duration = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseOut }
             };
-            
+            animation.Completed += (s, e) =>
+            {
+                BeginAnimation(TopProperty, null);
+                Top = targetTop;
+            };
             BeginAnimation(TopProperty, animation);
         }
 
         public void HideWithAnimation()
         {
-            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
-            
+            // 先清除可能残留的动画，确保读取到正确的当前位置
+            BeginAnimation(TopProperty, null);
+            BeginAnimation(LeftProperty, null);
+
+            // 记住当前可见位置，供下次显示时恢复
+            RememberVisiblePosition();
+
             // 检查是否应该禁用动画
             if (SystemAnimationHelper.ShouldDisableAnimation(isAnimationEnabled))
             {
-                // 直接隐藏，不使用动画
                 Hide();
                 return;
             }
-            
+
+            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
+            double currentTop = Top;
+
             var animation = new DoubleAnimation
             {
-                From = Top,
+                From = currentTop,
                 To = workingArea.Bottom + 50,
-                Duration = TimeSpan.FromMilliseconds(100), // 隐藏动画更快一些
-                EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseIn } // 使用自定义流畅缓动函数
+                Duration = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new SmoothEase { EasingMode = EasingMode.EaseIn }
             };
-            
-            animation.Completed += (s, e) => Hide();
+            animation.Completed += (s, e) =>
+            {
+                BeginAnimation(TopProperty, null);
+                Hide();
+            };
             BeginAnimation(TopProperty, animation);
+        }
+
+        private void RememberVisiblePosition()
+        {
+            lastVisibleLeft = Left;
+            lastVisibleTop = Top;
+        }
+
+        public void ResetWindowPosition()
+        {
+            // 清除已记录的位置，恢复到默认右下角
+            lastVisibleLeft = double.NaN;
+            lastVisibleTop = double.NaN;
+            appSettings.WindowLeft = null;
+            appSettings.WindowTop = null;
+            hasSavedPosition = false;
+
+            // 停止任何进行中的动画，避免位置/尺寸被动画覆盖
+            BeginAnimation(TopProperty, null);
+            BeginAnimation(LeftProperty, null);
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+
+            var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
+            double targetLeft = workingArea.Right - Width - 20;
+            double targetTop = workingArea.Bottom - Height - 20;
+
+            Left = targetLeft;
+            Top = targetTop;
+
+            // 显示窗口，确保用户能找到
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+
+            SaveSettings();
         }
 
 
@@ -1320,6 +1451,8 @@ namespace TrayChrome
                     this.Left = appSettings.WindowLeft.Value;
                     this.Top = appSettings.WindowTop.Value;
                     hasSavedPosition = true;
+                    lastVisibleLeft = appSettings.WindowLeft.Value;
+                    lastVisibleTop = appSettings.WindowTop.Value;
                 }
             }
             catch (Exception ex)
@@ -1341,8 +1474,8 @@ namespace TrayChrome
                 appSettings.IsTopMost = isTopMost;
                 appSettings.IsSuperMinimalMode = isSuperMinimalMode;
                 appSettings.IsAnimationEnabled = isAnimationEnabled;
-                appSettings.WindowLeft = this.Left;
-                appSettings.WindowTop = this.Top;
+                appSettings.WindowLeft = !double.IsNaN(lastVisibleLeft) ? lastVisibleLeft : this.Left;
+                appSettings.WindowTop = !double.IsNaN(lastVisibleTop) ? lastVisibleTop : this.Top;
                 appSettings.IsAdBlockEnabled = adBlocker.IsEnabled;
                 appSettings.AdBlockRules = adBlocker.BlockRules;
                 appSettings.AdAllowRules = adBlocker.AllowRules;
@@ -1618,11 +1751,13 @@ namespace TrayChrome
         private void HamburgerMenu_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             this.DragMove();
+            RememberVisiblePosition();
         }
-        
+
         private void DragButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             this.DragMove();
+            RememberVisiblePosition();
         }
         
         // ResizeButton的窗口调整大小功能
@@ -1772,11 +1907,15 @@ namespace TrayChrome
                     mainGrid.RowDefinitions[0].Height = new GridLength(35);
                 }
             }
-            
+
+            // 切换极简模式后重新应用圆角（WebView 撑满/收起时需要更新原生圆角区域）
+            // 延迟到布局完成后执行，确保拿到 WebView 的最新尺寸
+            Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
+
             // 保存设置
             SaveSettings();
         }
-        
+
         public void ToggleAnimation(bool enabled)
         {
             isAnimationEnabled = enabled;
@@ -2055,7 +2194,12 @@ namespace TrayChrome
                 {
                     _ = UpdateProxyConfig(); // 异步调用
                 }
-                
+
+                // 应用圆角设置
+                appSettings.EnableRoundedCorners = settings.EnableRoundedCorners;
+                appSettings.CornerRadiusPx = settings.CornerRadiusPx;
+                ApplyRoundedCorners();
+
                 // 保存设置
                 SaveSettings();
             }
@@ -2236,6 +2380,10 @@ namespace TrayChrome
         public bool IsProxyEnabled { get; set; } = false;
         public string ProxyServer { get; set; } = "127.0.0.1:7890";
         
+        // 圆角设置
+        public bool EnableRoundedCorners { get; set; } = true;
+        public double CornerRadiusPx { get; set; } = 8;
+
         // 全局快捷键设置
         public string Hotkey { get; set; } = "alt + x";
         public bool EnableGlobalHotKey { get; set; } = true;

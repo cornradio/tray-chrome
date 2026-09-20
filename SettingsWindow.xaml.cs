@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -17,7 +19,10 @@ namespace TrayChrome
         private App? app;
         private List<Bookmark> bookmarks = new List<Bookmark>();
         private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
-        
+
+        // 当前版本号
+        private const string CurrentVersion = "2.1.0";
+
         // 收藏夹更新事件
         public event EventHandler? BookmarksUpdated;
         
@@ -42,11 +47,16 @@ namespace TrayChrome
         public bool IsProxyEnabled { get; set; }
         public string ProxyServer { get; set; } = string.Empty;
         public bool AutoZoomOutOnStartup { get; set; }
+        public bool EnableRoundedCorners { get; set; }
+        public double CornerRadiusPx { get; set; }
 
         public SettingsWindow(AppSettings settings, MainWindow? mainWindow = null, App? app = null)
         {
             InitializeComponent();
-            
+
+            // 显示当前版本
+            VersionText.Text = CurrentVersion;
+
             this.mainWindow = mainWindow;
             this.app = app;
             this.originalSettings = settings;
@@ -77,7 +87,9 @@ namespace TrayChrome
                 EnableGlobalHotKey = settings.EnableGlobalHotKey,
                 IsProxyEnabled = settings.IsProxyEnabled,
                 ProxyServer = settings.ProxyServer,
-                AutoZoomOutOnStartup = settings.AutoZoomOutOnStartup
+                AutoZoomOutOnStartup = settings.AutoZoomOutOnStartup,
+                EnableRoundedCorners = settings.EnableRoundedCorners,
+                CornerRadiusPx = settings.CornerRadiusPx
             };
             
             // 加载当前设置到UI
@@ -112,6 +124,8 @@ namespace TrayChrome
             IsProxyEnabled = currentSettings.IsProxyEnabled;
             ProxyServer = currentSettings.ProxyServer;
             AutoZoomOutOnStartup = currentSettings.AutoZoomOutOnStartup;
+            EnableRoundedCorners = currentSettings.EnableRoundedCorners;
+            CornerRadiusPx = currentSettings.CornerRadiusPx;
         }
 
         private void SetupDataBinding()
@@ -194,6 +208,14 @@ namespace TrayChrome
             AutoZoomOutCheckBox.IsChecked = AutoZoomOutOnStartup;
             AutoZoomOutCheckBox.Checked += (s, e) => AutoZoomOutOnStartup = true;
             AutoZoomOutCheckBox.Unchecked += (s, e) => AutoZoomOutOnStartup = false;
+
+            // 圆角设置
+            RoundedCornersCheckBox.IsChecked = EnableRoundedCorners;
+            RoundedCornersCheckBox.Checked += (s, e) => EnableRoundedCorners = true;
+            RoundedCornersCheckBox.Unchecked += (s, e) => EnableRoundedCorners = false;
+
+            CornerRadiusTextBox.Text = CornerRadiusPx.ToString();
+            CornerRadiusTextBox.TextChanged += (s, e) => { if (double.TryParse(CornerRadiusTextBox.Text, out double r)) CornerRadiusPx = r; };
         }
 
         private void LoadIconSetting()
@@ -325,6 +347,19 @@ namespace TrayChrome
 
         private void OkButton_Click(object sender, RoutedEventArgs e)
         {
+            if (SaveAndApplyChanges())
+            {
+                Close();
+            }
+        }
+
+        private void ApplyButton_Click(object sender, RoutedEventArgs e)
+        {
+            SaveAndApplyChanges();
+        }
+
+        private bool SaveAndApplyChanges()
+        {
             try
             {
                 // 验证窗口大小
@@ -332,16 +367,16 @@ namespace TrayChrome
                 {
                     MessageBox.Show("窗口宽度必须在 200-3840 之间！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
                     WidthTextBox.Focus();
-                    return;
+                    return false;
                 }
-                
+
                 if (!double.TryParse(HeightTextBox.Text, out double height) || height < 150 || height > 2160)
                 {
                     MessageBox.Show("窗口高度必须在 150-2160 之间！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
                     HeightTextBox.Focus();
-                    return;
+                    return false;
                 }
-                
+
                 // 更新设置对象
                 currentSettings.WindowWidth = width;
                 currentSettings.WindowHeight = height;
@@ -365,17 +400,27 @@ namespace TrayChrome
                 currentSettings.IsProxyEnabled = IsProxyEnabled;
                 currentSettings.ProxyServer = ProxyServer;
                 currentSettings.AutoZoomOutOnStartup = AutoZoomOutOnStartup;
-                
+                currentSettings.EnableRoundedCorners = EnableRoundedCorners;
+
+                // 验证圆角大小
+                if (!double.TryParse(CornerRadiusTextBox.Text, out double cornerRadius) || cornerRadius < 0 || cornerRadius > 200)
+                {
+                    MessageBox.Show("圆角大小必须在 0-200 之间！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    CornerRadiusTextBox.Focus();
+                    return false;
+                }
+                currentSettings.CornerRadiusPx = cornerRadius;
+
                 // 应用设置到主窗口
                 if (mainWindow != null)
                 {
                     mainWindow.ApplySettings(currentSettings);
                 }
-                
+
                 // 应用图标设置
                 string iconType = "default";
                 string iconPath = "pack://application:,,,/Resources/Ampeross-Ampola-Chrome.ico";
-                
+
                 if (DingDingIconRadio.IsChecked == true)
                 {
                     iconType = "dingding";
@@ -396,26 +441,27 @@ namespace TrayChrome
                     iconType = "weixin";
                     iconPath = "pack://application:,,,/Resources/alternative-icons/weixin.ico";
                 }
-                
+
                 if (app != null)
                 {
                     app.SetApplicationIcon(iconPath);
                     app.SaveIconSetting(iconType, iconPath);
                 }
-                
+
                 // 保存设置到文件
                 SaveSettingsToFile();
-                
+
                 // 更新原始设置对象（用于同步）
                 CopySettings(originalSettings, currentSettings);
-                
+
                 // 标记设置已保存（非模态窗口不能设置DialogResult）
                 SettingsSaved = true;
-                Close();
+                return true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"保存设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
             }
         }
 
@@ -470,6 +516,8 @@ namespace TrayChrome
             target.IsProxyEnabled = source.IsProxyEnabled;
             target.ProxyServer = source.ProxyServer;
             target.AutoZoomOutOnStartup = source.AutoZoomOutOnStartup;
+            target.EnableRoundedCorners = source.EnableRoundedCorners;
+            target.CornerRadiusPx = source.CornerRadiusPx;
         }
 
         // 收藏夹管理方法
@@ -787,6 +835,107 @@ namespace TrayChrome
             catch (Exception ex)
             {
                 MessageBox.Show($"打开 GitHub 链接失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void EmailButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "mailto:kasusaland@gmail.com",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开邮件客户端失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void AltSnapButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://github.com/RamonUnch/AltSnap",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开 AltSnap 链接失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            CheckUpdateButton.IsEnabled = false;
+            UpdateStatusText.Text = "正在检查更新...";
+
+            try
+            {
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("TrayChrome");
+                client.Timeout = TimeSpan.FromSeconds(15);
+
+                string json = await client.GetStringAsync("https://api.github.com/repos/cornradio/tray-chrome/releases/latest");
+                using var doc = JsonDocument.Parse(json);
+
+                string tagName = doc.RootElement.GetProperty("tag_name").GetString() ?? "";
+                string latestVersion = tagName.TrimStart('v', 'V');
+
+                if (IsNewerVersion(latestVersion, CurrentVersion))
+                {
+                    UpdateStatusText.Text = $"发现新版本 {latestVersion}（当前 {CurrentVersion}）";
+                    var result = MessageBox.Show(
+                        $"发现新版本 {latestVersion}\n当前版本：{CurrentVersion}\n\n是否前往下载页面？",
+                        "检查更新", MessageBoxButton.YesNo, MessageBoxImage.Information);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        OpenUrl("https://github.com/cornradio/tray-chrome/releases/latest");
+                    }
+                }
+                else
+                {
+                    UpdateStatusText.Text = $"当前已是最新版本（{CurrentVersion}）";
+                }
+            }
+            catch (Exception)
+            {
+                UpdateStatusText.Text = "检查更新失败，请稍后重试。";
+            }
+            finally
+            {
+                CheckUpdateButton.IsEnabled = true;
+            }
+        }
+
+        private static bool IsNewerVersion(string latest, string current)
+        {
+            if (System.Version.TryParse(latest, out var l) && System.Version.TryParse(current, out var c))
+            {
+                return l > c;
+            }
+            return false;
+        }
+
+        private void OpenUrl(string url)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开链接失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

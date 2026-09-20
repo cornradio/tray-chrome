@@ -88,7 +88,23 @@
                                 <CheckBox Name="DarkModeCheckBox" Content="暗色模式"/>
                             </StackPanel>
                         </GroupBox>
-                        
+
+                        <GroupBox Header="圆角设置">
+                            <StackPanel>
+                                <CheckBox Name="RoundedCornersCheckBox" Content="启用圆角（极简模式下四周圆角）"/>
+                                <Grid Margin="5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Grid.Column="0" Content="圆角大小:"/>
+                                    <TextBox Grid.Column="1" Name="CornerRadiusTextBox" ToolTip="圆角半径，单位像素 (px)"/>
+                                    <Label Grid.Column="2" Content="px"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="图标设置">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -247,12 +263,6 @@
                                 </TextBlock>
                             </StackPanel>
                         </GroupBox>
-                        
-                        <GroupBox Header="关于">
-                            <StackPanel Margin="5">
-                                <Button Name="GitHubButton" Content="打开 GitHub 页面" Click="GitHubButton_Click" HorizontalAlignment="Left" Margin="5"/>
-                            </StackPanel>
-                        </GroupBox>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -295,12 +305,81 @@
                     <TextBlock Grid.Row="2" Name="BookmarkStatusText" Margin="0,5,0,0" Foreground="Gray" FontSize="10"/>
                 </Grid>
             </TabItem>
+
+            <!-- 关于 -->
+            <TabItem Header="关于">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+                        <GroupBox Header="关于 TrayChrome">
+                            <StackPanel Margin="5">
+                                <TextBlock TextWrapping="Wrap" Margin="5">
+                                    TrayChrome 是一个基于 WPF 和 WebView2 的轻量级托盘浏览器，类似 MenubarX，专为 Windows 设计。
+                                </TextBlock>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="版本">
+                            <StackPanel Margin="5">
+                                <StackPanel Orientation="Horizontal" Margin="5,0,5,5">
+                                    <TextBlock Text="当前版本：" VerticalAlignment="Center"/>
+                                    <TextBlock Name="VersionText" Text="1.3.0" FontWeight="Bold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Button Name="CheckUpdateButton" Content="检查更新" Click="CheckUpdateButton_Click" HorizontalAlignment="Left" Margin="5"/>
+                                <TextBlock Name="UpdateStatusText" Foreground="Gray" FontSize="11" Margin="5" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="项目链接">
+                            <StackPanel Margin="5">
+                                <Button Name="GitHubButton" Content="打开 GitHub 页面" Click="GitHubButton_Click" HorizontalAlignment="Left" Margin="5"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="作者联系方式">
+                            <StackPanel Margin="5">
+                                <Button Name="EmailButton" Content="kasusaland@gmail.com" Click="EmailButton_Click" HorizontalAlignment="Left" Margin="5" ToolTip="发送邮件给作者"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="命令行参数使用示例">
+                            <StackPanel Margin="5">
+                                <TextBlock TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Margin="5">
+                                    <Run Text="TrayChrome.exe" FontWeight="Bold"/><LineBreak/>
+                                    <Run Text="TrayChrome.exe --url https://www.baidu.com"/><LineBreak/>
+                                    <Run Text="TrayChrome.exe --url https://www.google.com --open"/><LineBreak/>
+                                    <Run Text="TrayChrome.exe --url https://jandan.net --open --clean"/><LineBreak/>
+                                    <Run Text="TrayChrome.exe --unclean"/><LineBreak/>
+                                    <Run Text="TrayChrome.exe --size 480x320 --url https://www.baidu.com --open"/><LineBreak/>
+                                    <Run Text="TrayChrome.exe --help"/><LineBreak/><LineBreak/>
+                                    <Run Text="参数说明：" FontWeight="Bold"/><LineBreak/>
+                                    <Run Text="--url &lt;网址&gt;   指定启动时加载的网页"/><LineBreak/>
+                                    <Run Text="--open         启动时直接显示窗口"/><LineBreak/>
+                                    <Run Text="--clean        启用极简模式（隐藏工具栏）"/><LineBreak/>
+                                    <Run Text="--unclean      强制禁用极简模式"/><LineBreak/>
+                                    <Run Text="--size &lt;宽x高&gt;  指定窗口大小，如 480x320"/><LineBreak/>
+                                    <Run Text="--help, -h     显示帮助信息"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="工具推荐">
+                            <StackPanel Margin="5">
+                                <TextBlock TextWrapping="Wrap" Margin="5">
+                                    在极简模式（Ctrl+Shift+B）下窗口无法拖拽，推荐使用 AltSnap 工具来移动和调整窗口大小。
+                                </TextBlock>
+                                <Button Name="AltSnapButton" Content="AltSnap (GitHub)" Click="AltSnapButton_Click" HorizontalAlignment="Left" Margin="5"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
         
         <!-- 底部按钮 -->
         <Border Grid.Row="1" BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="10,10,10,5">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Name="OkButton" Content="保存并关闭" Click="OkButton_Click" IsDefault="True" MinWidth="120"/>
+                <Button Name="ApplyButton" Content="应用" Click="ApplyButton_Click" MinWidth="100"/>
                 <Button Name="CancelButton" Content="关闭" Click="CancelButton_Click" IsCancel="True" MinWidth="100"/>
             </StackPanel>
         </Border>
