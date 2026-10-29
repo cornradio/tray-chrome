@@ -38,9 +38,33 @@ namespace TrayChrome
         private const int HTBOTTOM = 15;
         private const int HTBOTTOMLEFT = 16;
         private const int HTBOTTOMRIGHT = 17;
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int VK_LBUTTON = 0x01;
+        private const int VK_MENU = 0x12;
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int virtualKey);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetCursorPos(out NativePoint point);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativePoint
+        {
+            public int X;
+            public int Y;
+        }
 
         private List<Bookmark> bookmarks = new List<Bookmark>();
-        private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
+        private string bookmarksFilePath = BookmarkFolders.FilePath;
         private string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
         private bool isBookmarkPanelVisible = false;
         private bool isMobileUA = true;
@@ -54,10 +78,11 @@ namespace TrayChrome
         private bool isTopMost = true; // 默认置顶
         private bool isSuperMinimalMode = false; // 超级极简模式状态
         private bool isAnimationEnabled = true; // 动画启用状态
-        private bool opacityTemporarilyDisabled;
         private bool hasSavedPosition = false; // 是否存在保存的位置
         private double lastVisibleLeft = double.NaN; // 上次隐藏前的可见位置
         private double lastVisibleTop = double.NaN;
+        private readonly System.Threading.SemaphoreSlim browserInputLock = new(1, 1);
+        private readonly string dragMessage = "traychrome-drag-" + Guid.NewGuid().ToString("N");
         private AdBlocker adBlocker = new AdBlocker(); // 广告拦截器
         
         // 历史记录追踪
@@ -68,7 +93,7 @@ namespace TrayChrome
         // 用于更新托盘图标提示的事件
         public event Action<string> TitleChanged;
 
-        public MainWindow(string? startupUrl = null, bool useCleanMode = false, bool forceUncleanMode = false, double? customWidth = null, double? customHeight = null)
+        public MainWindow(string? startupUrl = null, bool useCleanMode = false, bool forceUncleanMode = false, double? customWidth = null, double? customHeight = null, List<string> startupTabs = null)
         {
             InitializeComponent();
             LoadSettings();
@@ -98,7 +123,8 @@ namespace TrayChrome
             }
             
             if (!string.IsNullOrWhiteSpace(startupUrl)) AddressBar.Text = startupUrl;
-            InitializeWebView(startupUrl);
+            RegisterTab(webView, AddressBar.Text);
+            InitializeWebView(startupUrl, startupTabs);
             LoadBookmarks();
 
             // 设置初始置顶状态
@@ -133,6 +159,10 @@ namespace TrayChrome
                 StopMemoryCleanupTimer();
                 SaveSettings();
             };
+            this.Closed += (_, _) =>
+            {
+                foreach (var tab in tabs) tab.View.Dispose();
+            };
             
             // 启用窗口边缘调整大小功能
             this.SourceInitialized += MainWindow_SourceInitialized;
@@ -147,7 +177,6 @@ namespace TrayChrome
 
             // 应用圆角设置（随窗口尺寸变化重新裁剪）
             MainContentGrid.SizeChanged += (s, e) => ApplyRoundedCorners();
-            webView.SizeChanged += (s, e) => ApplyRoundedCorners();
             ApplyRoundedCorners();
 
             // 启动内存清理定时器
@@ -158,19 +187,19 @@ namespace TrayChrome
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            Key key = e.Key == Key.System ? e.SystemKey : e.Key;
-            if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift)
-                && key == Key.T)
+            if (Keyboard.Modifiers == ModifierKeys.Control)
             {
-                if (!e.IsRepeat)
-                {
-                    opacityTemporarilyDisabled = !opacityTemporarilyDisabled;
-                    ApplyWindowOpacity();
-                }
+                if (e.Key == Key.T) { e.Handled = true; NewTab_Click(this, new RoutedEventArgs()); return; }
+                if (e.Key == Key.W) { e.Handled = true; CloseTab(activeTab); return; }
+            }
+            if ((Keyboard.Modifiers == ModifierKeys.Control
+                || Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) && e.Key == Key.Tab)
+            {
+                int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : 1;
+                SelectTab(tabs[(tabs.IndexOf(activeTab) + step + tabs.Count) % tabs.Count]);
                 e.Handled = true;
                 return;
             }
-
             if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
             {
                 if (isSuperMinimalMode) ToggleSuperMinimalMode(false);
@@ -219,18 +248,21 @@ namespace TrayChrome
             }
         }
 
-        private void ApplyWindowOpacity()
-        {
-            Opacity = opacityTemporarilyDisabled ? 1.0 : appSettings.WindowOpacity;
-        }
-
-        private async void InitializeWebView(string? startupUrl = null)
+        private async void InitializeWebView(string? startupUrl = null, List<string> startupTabs = null)
         {
             await InitializeWebViewInternal(startupUrl);
+            var first = activeTab;
+            if (startupTabs != null)
+                foreach (string url in startupTabs) await OpenTabAsync(url);
+            SelectTab(first);
+            TabsReady = tabs.All(tab => tab.View.CoreWebView2 != null);
+            startupTabsRestoring = false;
         }
 
         private async Task InitializeWebViewInternal(string? startupUrl = null)
         {
+            tabInitializing = true;
+            var view = webView;
             try
             {
                 // 检查 WebView2 是否已经初始化
@@ -269,15 +301,32 @@ namespace TrayChrome
                 UpdateUIAppearance(isDarkMode);
                 
                 // 监听导航事件
-                webView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
-                webView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
-                webView.CoreWebView2.SourceChanged += CoreWebView2_SourceChanged;
+                webView.CoreWebView2.NavigationStarting += (s, e) => { if (view == webView) CoreWebView2_NavigationStarting(s, e); };
+                webView.CoreWebView2.NavigationCompleted += (s, e) => { if (view == webView) CoreWebView2_NavigationCompleted(s, e); };
+                webView.CoreWebView2.SourceChanged += (s, e) => { RefreshTabTitle(view); if (view == webView) CoreWebView2_SourceChanged(s, e); };
                 
                 // 监听文档标题变化事件
-                webView.CoreWebView2.DocumentTitleChanged += CoreWebView2_DocumentTitleChanged;
+                webView.CoreWebView2.DocumentTitleChanged += (s, e) => { RefreshTabTitle(view); if (view == webView) CoreWebView2_DocumentTitleChanged(s, e); };
                 
                 // 拦截新窗口打开请求，在当前窗口中打开
                 webView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
+                webView.CoreWebView2.WebMessageReceived += (_, args) =>
+                {
+                    if (view == webView) HandleBrowserDrag(args.WebMessageAsJson);
+                };
+                webView.CoreWebView2.FrameCreated += (_, args) =>
+                {
+                    var frame = args.Frame;
+                    var frames = tabs.Single(tab => tab.View == view).Frames;
+                    frames.Add(frame);
+                    frame.Destroyed += (_, _) => frames.Remove(frame);
+                    frame.WebMessageReceived += (_, message) =>
+                    {
+                        if (view == webView) HandleBrowserDrag(message.WebMessageAsJson);
+                    };
+                };
+                webView.KeyDown += Window_PreviewKeyDown;
+                await UpdateBrowserDragAsync();
                 
                 // 初始化广告拦截器（在 CoreWebView2 准备好后）
                 InitializeAdBlocker();
@@ -292,12 +341,14 @@ namespace TrayChrome
                 
                 webView.CoreWebView2.Navigate(urlToNavigate);
                 AddressBar.Text = urlToNavigate;
+                _ = Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
             }
             catch (Exception ex)
             {
                 (Application.Current as App)?.WriteDiagnostic("WebView2 initialization failed", ex);
                 MessageBox.Show($"WebView2初始化失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally { tabInitializing = false; }
         }
 
         private void CoreWebView2_SourceChanged(object? sender, CoreWebView2SourceChangedEventArgs e)
@@ -306,6 +357,84 @@ namespace TrayChrome
             {
                 AddressBar.Text = webView.CoreWebView2.Source;
             });
+        }
+
+        private void HandleBrowserDrag(string json)
+        {
+            if (json != JsonSerializer.Serialize(dragMessage) || !isSuperMinimalMode) return;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // WebView2 owns the mouse input; WPF's cached button state can be stale.
+                if (!isSuperMinimalMode || !IsVisible || WindowState != WindowState.Normal
+                   || (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0
+                   || (GetAsyncKeyState(VK_MENU) & 0x8000) == 0) return;
+                if (!GetCursorPos(out var cursor))
+                {
+                   (Application.Current as App)?.WriteDiagnostic("Browser Alt-drag: unable to read cursor position.");
+                   return;
+                }
+                BeginAnimation(TopProperty, null);
+                BeginAnimation(LeftProperty, null);
+                var handle = new WindowInteropHelper(this).Handle;
+                var coordinates = new IntPtr(unchecked((int)((cursor.X & 0xFFFF) | ((cursor.Y & 0xFFFF) << 16))));
+                ReleaseCapture();
+                (Application.Current as App)?.WriteDiagnostic("Browser Alt-drag started.");
+                // Run the native move loop after returning from the WebView2 callback.
+                SendMessage(handle, WM_NCLBUTTONDOWN, new IntPtr(HTCAPTION), coordinates);
+                RememberVisiblePosition();
+            }));
+        }
+
+        private async Task UpdateBrowserDragAsync()
+        {
+            await browserInputLock.WaitAsync();
+            try
+            {
+                foreach (var tab in tabs.ToArray())
+                {
+                    var core = tab.View.CoreWebView2;
+                    if (core == null) continue;
+                    string script = $$"""
+                        (() => {
+                            const name = {{JsonSerializer.Serialize(dragMessage)}};
+                            if (window[name]) document.removeEventListener('mousedown', window[name], true);
+                            window[name] = event => {
+                                if (!event.isTrusted || event.button !== 0 || !event.altKey) return;
+                                event.preventDefault();
+                                event.stopImmediatePropagation();
+                                window.chrome.webview.postMessage(name);
+                            };
+                            if ({{(isSuperMinimalMode ? "true" : "false")}})
+                                document.addEventListener('mousedown', window[name], true);
+                        })();
+                        """;
+                    if (tab.ScriptId != null)
+                        core.RemoveScriptToExecuteOnDocumentCreated(tab.ScriptId);
+                    tab.ScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
+                    await core.ExecuteScriptAsync(script);
+                    foreach (var frame in tab.Frames.ToArray())
+                    {
+                        if (frame.IsDestroyed() == 0) await frame.ExecuteScriptAsync(script);
+                    }
+                }
+            }
+            finally
+            {
+                browserInputLock.Release();
+            }
+        }
+
+        private async void UpdateBrowserDrag()
+        {
+            try
+            {
+                await UpdateBrowserDragAsync();
+            }
+            catch (Exception ex)
+            {
+                (Application.Current as App)?.WriteDiagnostic("Updating browser Alt-drag failed", ex);
+                MessageBox.Show($"更新网页 Alt 拖动失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
@@ -539,10 +668,10 @@ namespace TrayChrome
             {
                 settingsWindow.MainTabControl.SelectedIndex = 2;
             }
-            settingsWindow.ShowDialog();
+            settingsWindow.Show();
         }
 
-        private void CoreWebView2_NewWindowRequested(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e)
+        private async void CoreWebView2_NewWindowRequested(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e)
         {
             // 检查是否按住了Ctrl键
             bool isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
@@ -567,8 +696,8 @@ namespace TrayChrome
 
             if (isCtrlPressed)
             {
-                // 按住Ctrl键时，在新的WebView2窗口中打开链接
-                e.Handled = false; // 允许WebView2创建新窗口
+                e.Handled = true;
+                await OpenTabAsync(e.Uri);
             }
             else
             {
@@ -576,7 +705,7 @@ namespace TrayChrome
                 e.Handled = true;
                 if (!string.IsNullOrEmpty(e.Uri))
                 {
-                    webView.CoreWebView2?.Navigate(e.Uri);
+                    (sender as CoreWebView2)?.Navigate(e.Uri);
                 }
             }
         }
@@ -592,6 +721,7 @@ namespace TrayChrome
          
          private void UpdateUIAppearance(bool darkMode)
          {
+             UpdateTabTheme(darkMode);
              try
              {
                  var buttonForeground = darkMode 
@@ -804,6 +934,7 @@ namespace TrayChrome
                 ? new RectangleGeometry(new Rect(0, 0, MainContentGrid.ActualWidth, MainContentGrid.ActualHeight), radius, radius)
                 : null;
 
+            ApplyBrowserCorners(radius);
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
@@ -1251,8 +1382,7 @@ namespace TrayChrome
                 
                 if (File.Exists(bookmarksFilePath))
                 {
-                    var json = File.ReadAllText(bookmarksFilePath);
-                    bookmarks = JsonSerializer.Deserialize<List<Bookmark>>(json) ?? new List<Bookmark>();
+                    bookmarks = BookmarkFolders.Load(bookmarksFilePath);
                 }
                 else
                 {
@@ -1279,8 +1409,8 @@ namespace TrayChrome
         {
             try
             {
-                var json = JsonSerializer.Serialize(bookmarks, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(bookmarksFilePath, json);
+                BookmarkFolders.Save(bookmarksFilePath, bookmarks);
+                (Application.Current as App)?.OnBookmarksUpdated(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {
@@ -1316,6 +1446,11 @@ namespace TrayChrome
             int insertPos = startIndex + 1;
             foreach (var bookmark in bookmarks)
             {
+                if (bookmark.IsFolder)
+                {
+                    BookmarkContextMenu.Items.Insert(insertPos++, CreateBookmarkFolderMenu(bookmark));
+                    continue;
+                }
                 MenuItem bookmarkItem = new MenuItem
                 {
                     Header = bookmark.Title,
@@ -1328,6 +1463,7 @@ namespace TrayChrome
                     {
                         webView.CoreWebView2?.Navigate(bookmarkItem.Tag.ToString());
                     }
+
                 };
                 
                 // 中键点击删除
@@ -1348,7 +1484,7 @@ namespace TrayChrome
                 };
                 
                 // 添加右键编辑
-                ContextMenu itemContextMenu = new ContextMenu();
+                ContextMenu itemContextMenu = CreateBrowserMenu();
                 MenuItem editItem = new MenuItem { Header = "编辑" };
                 editItem.Click += (s, args) => EditBookmark(bookmark);
                 itemContextMenu.Items.Add(editItem);
@@ -1361,15 +1497,30 @@ namespace TrayChrome
 
         }
 
+        private MenuItem CreateBookmarkFolderMenu(Bookmark folder)
+        {
+            var menu = new MenuItem { Header = folder.Title };
+            foreach (var bookmark in folder.Children)
+            {
+                if (bookmark.IsFolder) menu.Items.Add(CreateBookmarkFolderMenu(bookmark));
+                else
+                {
+                    var item = new MenuItem { Header = bookmark.Title, ToolTip = bookmark.Url };
+                    item.Click += (_, args) =>
+                    {
+                        args.Handled = true;
+                        webView.CoreWebView2?.Navigate(bookmark.Url);
+                    };
+                    menu.Items.Add(item);
+                }
+            }
+            if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "空文件夹", IsEnabled = false });
+            return menu;
+        }
+
         private void ShowSettings_Bookmarks_Click(object sender, RoutedEventArgs e)
         {
-            var settingsWindow = new SettingsWindow(appSettings, this, Application.Current as App);
-            // 收藏夹是第6个标签，索引为 5
-            if (settingsWindow.MainTabControl != null)
-            {
-                settingsWindow.MainTabControl.SelectedIndex = 5;
-            }
-            settingsWindow.ShowDialog();
+            (Application.Current as App)?.OpenBookmarkManager();
         }
 
         private void ProxyButton_Click(object sender, RoutedEventArgs e)
@@ -1428,7 +1579,6 @@ namespace TrayChrome
                 isTopMost = appSettings.IsTopMost;
                 isSuperMinimalMode = appSettings.IsSuperMinimalMode;
                 isAnimationEnabled = appSettings.IsAnimationEnabled;
-                ApplyWindowOpacity();
                 
                 // 应用UI外观（需要在WebView初始化后调用，所以延迟到InitializeWebView之后）
                 
@@ -1501,6 +1651,7 @@ namespace TrayChrome
                 appSettings.IsAdBlockEnabled = adBlocker.IsEnabled;
                 appSettings.AdBlockRules = adBlocker.BlockRules;
                 appSettings.AdAllowRules = adBlocker.AllowRules;
+                ApplyTabSettings();
                 
                 var options = new JsonSerializerOptions 
                 { 
@@ -1556,133 +1707,12 @@ namespace TrayChrome
 
         private void EditBookmark(Bookmark bookmark)
         {
-            // 创建编辑对话框
-            var dialog = new Window
-            {
-                Title = "编辑收藏夹",
-                Width = 400,
-                Height = 200,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = this,
-                ResizeMode = ResizeMode.NoResize
-            };
-
-            var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            // 标题标签和文本框
-            var titleLabel = new Label { Content = "标题:", Margin = new Thickness(10, 10, 5, 5) };
-            Grid.SetRow(titleLabel, 0);
-            Grid.SetColumn(titleLabel, 0);
-            grid.Children.Add(titleLabel);
-
-            var titleTextBox = new TextBox 
-            { 
-                Text = bookmark.Title, 
-                Margin = new Thickness(5, 10, 10, 5),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetRow(titleTextBox, 0);
-            Grid.SetColumn(titleTextBox, 1);
-            grid.Children.Add(titleTextBox);
-
-            // URL标签和文本框
-            var urlLabel = new Label { Content = "URL:", Margin = new Thickness(10, 5, 5, 5) };
-            Grid.SetRow(urlLabel, 1);
-            Grid.SetColumn(urlLabel, 0);
-            grid.Children.Add(urlLabel);
-
-            var urlTextBox = new TextBox 
-            { 
-                Text = bookmark.Url, 
-                Margin = new Thickness(5, 5, 10, 5),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetRow(urlTextBox, 1);
-            Grid.SetColumn(urlTextBox, 1);
-            grid.Children.Add(urlTextBox);
-
-            // 按钮面板
-            var buttonPanel = new StackPanel 
-            { 
-                Orientation = Orientation.Horizontal, 
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(10, 20, 10, 10)
-            };
-            Grid.SetRow(buttonPanel, 2);
-            Grid.SetColumnSpan(buttonPanel, 2);
-
-            var okButton = new Button 
-            { 
-                Content = "确定", 
-                Width = 80, 
-                Height = 30, 
-                Margin = new Thickness(5, 0, 5, 0)
-            };
-            okButton.Click += (s, e) => {
-                if (!string.IsNullOrWhiteSpace(titleTextBox.Text) && !string.IsNullOrWhiteSpace(urlTextBox.Text))
-                {
-                    bookmark.Title = titleTextBox.Text.Trim();
-                    bookmark.Url = urlTextBox.Text.Trim();
-                    SaveBookmarks();
-                    RefreshBookmarkMenu();
-                    dialog.DialogResult = true;
-                    dialog.Close();
-                }
-                else
-                {
-                    MessageBox.Show("标题和URL不能为空！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            };
-
-            var cancelButton = new Button 
-            { 
-                Content = "取消", 
-                Width = 80, 
-                Height = 30, 
-                Margin = new Thickness(5, 0, 5, 0)
-            };
-            cancelButton.Click += (s, e) => {
-                dialog.DialogResult = false;
-                dialog.Close();
-            };
-
-            buttonPanel.Children.Add(okButton);
-            buttonPanel.Children.Add(cancelButton);
-            grid.Children.Add(buttonPanel);
-
-            dialog.Content = grid;
-            dialog.ShowDialog();
+            (Application.Current as App)?.OpenBookmarkManager().EditBookmarkFromMenu(bookmark, bookmarks);
         }
 
         private void EditBookmarkJson_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                // 确保收藏夹文件存在
-                if (!File.Exists(bookmarksFilePath))
-                {
-                    SaveBookmarks(); // 创建文件
-                }
-                
-                // 直接打开配置文件夹
-                string configFolder = Path.GetDirectoryName(bookmarksFilePath);
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"\"{configFolder}\"",
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"打开配置文件夹失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            (Application.Current as App)?.OpenBookmarkManager();
         }
 
         private void ToggleUserAgent()
@@ -1898,6 +1928,8 @@ namespace TrayChrome
         public void ToggleSuperMinimalMode(bool enabled)
         {
             isSuperMinimalMode = enabled;
+            UpdateTabBarVisibility();
+            UpdateBrowserDrag();
             
             if (enabled)
             {
@@ -2068,6 +2100,8 @@ namespace TrayChrome
         // WebView2环境重置功能 - 用于彻底清理WebView2进程
         private async Task ResetWebViewEnvironment()
         {
+            if (tabInitializing) return;
+            tabInitializing = true;
             try
             {
                 if (webView != null)
@@ -2091,6 +2125,8 @@ namespace TrayChrome
                     // 3. 从 UI 移除并释放 (WPF 中 Dispose 后不能重用)
                     parent.Children.RemoveAt(index);
                     webView.Dispose();
+                    activeTab.Frames.Clear();
+                    activeTab.ScriptId = null;
                     
                     // 4. 强制垃圾回收
                     GC.Collect();
@@ -2101,13 +2137,13 @@ namespace TrayChrome
                     await Task.Delay(1000);
                     
                     // 6. 创建新实例并放回原位
-                    webView = new Microsoft.Web.WebView2.Wpf.WebView2CompositionControl();
+                    webView = new Microsoft.Web.WebView2.Wpf.WebView2();
+                    activeTab.View = webView;
                     webView.Name = "webView";
-                    Grid.SetRow(webView, 1);
                     parent.Children.Insert(index, webView);
                     
                     // 7. 重新初始化
-                    await InitializeWebViewInternal();
+                    await InitializeWebViewInternal(activeTab.Url);
                     
                     // 8. 重新初始化广告拦截器
                     InitializeAdBlocker();
@@ -2122,6 +2158,7 @@ namespace TrayChrome
             {
                 System.Diagnostics.Debug.WriteLine($"WebView2环境重置异常: {ex.Message}");
             }
+            finally { tabInitializing = false; }
         }
         
         public bool IsAnimationEnabled => isAnimationEnabled;
@@ -2227,9 +2264,6 @@ namespace TrayChrome
                 appSettings.EnableRoundedCorners = settings.EnableRoundedCorners;
                 appSettings.CornerRadiusPx = settings.CornerRadiusPx;
                 ApplyRoundedCorners();
-                appSettings.WindowOpacity = settings.WindowOpacity;
-                opacityTemporarilyDisabled = false;
-                ApplyWindowOpacity();
 
                 // 保存设置
                 SaveSettings();
@@ -2387,6 +2421,8 @@ namespace TrayChrome
     {
         public string Title { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
+        public bool IsFolder { get; set; }
+        public List<Bookmark> Children { get; set; } = new();
     }
 
     public class AppSettings
@@ -2415,17 +2451,6 @@ namespace TrayChrome
         public bool IsTopMost { get; set; } = true;
         public bool IsSuperMinimalMode { get; set; } = false;
         public bool IsAnimationEnabled { get; set; } = true;
-        private double windowOpacity = 1.0;
-        public double WindowOpacity
-        {
-            get => windowOpacity;
-            set
-            {
-                if (!double.IsFinite(value) || value < 0.3 || value > 1.0)
-                    throw new ArgumentOutOfRangeException(nameof(value), "透明度必须在 30%-100% 之间。");
-                windowOpacity = value;
-            }
-        }
         
         // 广告拦截设置
         public bool IsAdBlockEnabled { get; set; } = false;

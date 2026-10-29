@@ -1,9 +1,10 @@
-# One-click packaging script - Package application as single file
-# Framework-dependent (requires .NET runtime on target machine)
+# Package framework-dependent and self-contained single-file editions.
 
 param(
     [string]$DotnetPath,
-    [switch]$NoPrompt
+    [switch]$NoPrompt,
+    [ValidateSet('Both', 'framework-dependent', 'self-contained')]
+    [string]$Edition = 'Both'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,40 +52,42 @@ try {
     Write-Host "Using .NET SDK host: $dotnet" -ForegroundColor Cyan
     New-Item -ItemType Directory -Path $publishPath -Force | Out-Null
 
-    # Publish as single file, framework-dependent (requires .NET runtime on target)
-    Write-Host "Publishing application..." -ForegroundColor Cyan
-    & $dotnet publish $projectPath -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $publishPath
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "`nPackaging successful!" -ForegroundColor Green
-        Write-Host "Output directory: $publishPath" -ForegroundColor White
-        Write-Host "Executable file: TrayChrome.exe" -ForegroundColor White
-        Write-Host "`nImportant notes:" -ForegroundColor Yellow
-        Write-Host "   • Target machine needs .NET 9.0 Desktop Runtime installed" -ForegroundColor Gray
-        Write-Host "   • Smaller file size but requires runtime dependency" -ForegroundColor Gray
-        Write-Host "   • Download: https://dotnet.microsoft.com/download/dotnet/9.0" -ForegroundColor Gray
-        
-        # Display file information
-        $exePath = Join-Path $publishPath 'TrayChrome.exe'
+    $editions = @(
+        @{ Name = 'framework-dependent'; SelfContained = 'false'; Requirement = 'Requires .NET 9 Desktop Runtime (x64).' },
+        @{ Name = 'self-contained'; SelfContained = 'true'; Requirement = 'Includes .NET runtime; no .NET installation required.' }
+    )
+    if ($Edition -ne 'Both') {
+        $editions = @($editions | Where-Object { $_.Name -eq $Edition })
+    }
+    foreach ($package in $editions) {
+        $editionPath = Join-Path $publishPath $package.Name
+        New-Item -ItemType Directory -Path $editionPath -Force | Out-Null
+        Write-Host "`nPublishing $($package.Name)..." -ForegroundColor Cyan
+        $compressionProperty = "-p:EnableCompressionInSingleFile=$($package.SelfContained)"
+        & $dotnet publish $projectPath -c Release -r win-x64 --self-contained $package.SelfContained -p:PublishSingleFile=true $compressionProperty -p:IncludeNativeLibrariesForSelfExtract=true -o $editionPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Publishing $($package.Name) failed (exit code $LASTEXITCODE)."
+        }
+
+        $exePath = Join-Path $editionPath 'TrayChrome.exe'
         if (-not (Test-Path -LiteralPath $exePath -PathType Leaf)) {
-            throw "Publish returned success but TrayChrome.exe was not created."
+            throw "Publishing $($package.Name) returned success but TrayChrome.exe was not created."
         }
-        if (Test-Path $exePath) {
-            $fileInfo = Get-Item $exePath
-            $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-            Write-Host "`nFile size: $fileSizeMB MB" -ForegroundColor Cyan
+        $fileInfo = Get-Item -LiteralPath $exePath
+        $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+        Write-Host "Executable: $exePath ($fileSizeMB MB)" -ForegroundColor White
+        Write-Host $package.Requirement -ForegroundColor Yellow
+    }
+
+    Write-Host "`nSelected editions packaged successfully!" -ForegroundColor Green
+    Write-Host "Both editions require WebView2 Runtime. Neither requires the .NET SDK to run." -ForegroundColor Yellow
+    Write-Host "Existing files directly under publish are unchanged; use the edition subfolders." -ForegroundColor Gray
+
+    if (-not $NoPrompt) {
+        $openFolder = Read-Host "`nOpen publish directory? (y/n)"
+        if ($openFolder -eq 'y' -or $openFolder -eq 'Y') {
+            Start-Process "explorer.exe" -ArgumentList "`"$publishPath`""
         }
-        
-        # Ask if user wants to open publish directory
-        if (-not $NoPrompt) {
-            $openFolder = Read-Host "`nOpen publish directory? (y/n)"
-            if ($openFolder -eq 'y' -or $openFolder -eq 'Y') {
-                Start-Process "explorer.exe" -ArgumentList "`"$publishPath`""
-            }
-        }
-    } else {
-        Write-Host "`nPackaging failed! Please check error messages." -ForegroundColor Red
-        exit 1
     }
 } catch {
     Write-Host "`nError occurred during packaging: $($_.Exception.Message)" -ForegroundColor Red

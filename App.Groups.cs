@@ -17,10 +17,12 @@ namespace TrayChrome
         public AppGroupEntry CaptureCurrentApp()
         {
             if (mainWindow == null) throw new InvalidOperationException("主窗口尚未初始化。");
+            if (!mainWindow.TabsReady) throw new InvalidOperationException("标签页尚未初始化完成，请稍后保存。");
             var normalSize = mainWindow.GetNormalWindowSize();
             return new AppGroupEntry
             {
                 Url = mainWindow.webView.CoreWebView2?.Source ?? mainWindow.AddressBar.Text,
+                Tabs = mainWindow.CaptureTabUrls().Where((url, index) => index != mainWindow.ActiveTabIndex).ToList(),
                 IconPath = currentIconPath,
                 Width = normalSize.Width,
                 Height = normalSize.Height,

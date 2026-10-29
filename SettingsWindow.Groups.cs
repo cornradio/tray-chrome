@@ -29,13 +29,20 @@ namespace TrayChrome
         private sealed class AppGroupRow
         {
             public AppGroupEntry Entry { get; }
+            public AppGroupEntry Owner { get; }
+            public int TabIndex { get; }
+            public string Instance { get; }
             public string Url => Entry.Url;
             public string Hotkey => string.IsNullOrWhiteSpace(Entry.Hotkey) ? "未设置" : Entry.Hotkey;
             public ImageSource Logo { get; }
-            public AppGroupRow(AppGroupEntry entry)
+            public AppGroupRow(AppGroupEntry owner, int instanceIndex, int tabIndex = -1)
             {
-                Entry = entry;
-                Logo = IconSettings.LoadImage(entry.IconPath);
+                Owner = owner;
+                TabIndex = tabIndex;
+                Instance = $"实例 {instanceIndex + 1}";
+                Entry = CopyAppGroupEntry(owner);
+                if (tabIndex >= 0) Entry.Url = owner.Tabs[tabIndex];
+                Logo = IconSettings.LoadImage(owner.IconPath);
             }
         }
 
@@ -71,11 +78,13 @@ namespace TrayChrome
             AppGroupStatusText.Text = "暂无配置，可导入组文件或保存当前窗口。";
             if (SelectedAppGroupPath is not string path) return;
             var group = AppGroups.Load(path);
-            var rows = group.Apps.Select(entry => new AppGroupRow(entry)).ToList();
+            var rows = group.Apps.SelectMany((entry, index) =>
+                new[] { new AppGroupRow(entry, index) }.Concat(
+                    entry.Tabs.Select((_, tabIndex) => new AppGroupRow(entry, index, tabIndex)))).ToList();
             AppGroups.Remember(path);
             displayedAppGroup = group;
             AppGroupGrid.ItemsSource = rows;
-            AppGroupStatusText.Text = $"{Path.GetFileName(path)} · {group.Apps.Count} 个 App";
+            AppGroupStatusText.Text = $"{Path.GetFileName(path)} · {group.Apps.Count} 个实例 · {rows.Count} 个网页";
         }
 
         private void ImportAppGroup_Click(object sender, RoutedEventArgs e)
@@ -91,21 +100,20 @@ namespace TrayChrome
             catch (Exception ex) { ShowAppGroupError(ex); }
         }
 
-        private void SaveAppGroup_Click(object sender, RoutedEventArgs e)
+        private async void SaveAppGroup_Click(object sender, RoutedEventArgs e)
         {
             string path = SelectedAppGroupPath ?? AppGroups.DefaultFile;
-            if (File.Exists(path) && MessageBox.Show(this, "用当前窗口覆盖所选配置？保存后该组仅包含当前窗口。", "保存 App 组",
+            if (File.Exists(path) && MessageBox.Show(this, "用当前所有运行中的 App 覆盖所选配置？包括隐藏到托盘的实例。", "保存 App 组",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            SetAppGroupBusy(true);
             try
             {
-                var group = new AppGroup
-                {
-                    Name = displayedAppGroup?.Name ?? Path.GetFileNameWithoutExtension(path),
-                    Apps = new List<AppGroupEntry> { ((App)Application.Current).CaptureCurrentApp() }
-                };
+                string name = displayedAppGroup?.Name ?? Path.GetFileNameWithoutExtension(path);
+                var group = await AppGroups.CaptureAsync(name);
                 SaveAppGroup(path, group);
             }
             catch (Exception ex) { ShowAppGroupError(ex); }
+            finally { SetAppGroupBusy(false); }
         }
 
         private void SaveAppGroupAs_Click(object sender, RoutedEventArgs e)
@@ -254,17 +262,35 @@ namespace TrayChrome
             Width = entry.Width,
             Height = entry.Height,
             IsSuperMinimalMode = entry.IsSuperMinimalMode,
-            Hotkey = entry.Hotkey
+            Hotkey = entry.Hotkey,
+            Tabs = new List<string>(entry.Tabs)
         };
 
         private AppGroup CreateEditedAppGroup(AppGroupRow row, AppGroupEntry? replacement)
         {
             var current = displayedAppGroup ?? throw new InvalidOperationException("请重新选择要编辑的配置。");
-            int index = current.Apps.IndexOf(row.Entry);
+            int index = current.Apps.IndexOf(row.Owner);
             if (index < 0) throw new InvalidOperationException("条目已发生变化，请重新选择配置。");
             var result = new AppGroup { Name = current.Name, Apps = new List<AppGroupEntry>(current.Apps) };
-            if (replacement == null) result.Apps.RemoveAt(index);
-            else result.Apps[index] = replacement;
+            var updated = CopyAppGroupEntry(row.Owner);
+            if (replacement == null)
+            {
+                if (row.TabIndex >= 0) updated.Tabs.RemoveAt(row.TabIndex);
+                else if (updated.Tabs.Count > 0)
+                {
+                    updated.Url = updated.Tabs[0];
+                    updated.Tabs.RemoveAt(0);
+                }
+                else { result.Apps.RemoveAt(index); return result; }
+            }
+            else
+            {
+                if (row.TabIndex >= 0) updated.Tabs[row.TabIndex] = replacement.Url;
+                else updated.Url = replacement.Url;
+                updated.IconPath = replacement.IconPath;
+                updated.Hotkey = replacement.Hotkey;
+            }
+            result.Apps[index] = updated;
             return result;
         }
 
@@ -282,7 +308,7 @@ namespace TrayChrome
             try
             {
                 string path = SelectedAppGroupPath ?? throw new InvalidOperationException("请先选择一个 App 组。");
-                int index = displayedAppGroup?.Apps.IndexOf(row.Entry) ?? -1;
+                int index = displayedAppGroup?.Apps.IndexOf(row.Owner) ?? -1;
                 if (index < 0) throw new InvalidOperationException("条目已发生变化，请重新选择配置。");
                 bool started = await ((App)Application.Current).LoadAppGroupAsync(path, index);
                 if (started) AppGroupStatusText.Text = $"已启动到托盘：{row.Url}";

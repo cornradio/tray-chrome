@@ -89,16 +89,6 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="窗口透明度">
-                            <StackPanel>
-                                <Slider Name="OpacitySlider" Minimum="30" Maximum="100"
-                                        TickFrequency="5" IsSnapToTickEnabled="True" Margin="5"/>
-                                <TextBlock Margin="5" Text="{Binding Value, ElementName=OpacitySlider, StringFormat=透明度：{0:F0}%}"/>
-                                <TextBlock Margin="5" TextWrapping="Wrap" Foreground="Gray"
-                                           Text="Ctrl + Alt + Shift + T：在设定透明度与完全不透明之间切换（仅当前窗口）。"/>
-                            </StackPanel>
-                        </GroupBox>
-
                         <GroupBox Header="圆角设置">
                             <StackPanel>
                                 <CheckBox Name="RoundedCornersCheckBox" Content="启用圆角（极简模式下四周圆角）"/>
@@ -277,9 +267,6 @@
                                     <LineBreak/>
                                     <Run Text="• Alt + 左键拖动：" FontWeight="Bold"/>
                                     <Run Text="极简模式下移动窗口，不点击网页"/>
-                                    <LineBreak/>
-                                    <Run Text="• Ctrl + Alt + Shift + T：" FontWeight="Bold"/>
-                                    <Run Text="切换设定透明度与完全不透明"/>
                                 </TextBlock>
                             </StackPanel>
                         </GroupBox>
@@ -289,41 +276,12 @@
             
             <!-- 收藏夹管理 -->
             <TabItem Header="收藏夹">
-                <Grid Margin="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    
-                    <!-- 工具栏 -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5">
-                        <Button Name="AddBookmarkButton" Content="添加收藏" Click="AddBookmarkButton_Click"  Width="70" Padding="0,3"/>
-                        <Button Name="EditBookmarkButton" Content="编辑" Click="EditBookmarkButton_Click"  Width="70" Padding="0,3"/>
-                        <Button Name="DeleteBookmarkButton" Content="删除" Click="DeleteBookmarkButton_Click"  Width="70" Padding="0,3"/>
-                        <Button Name="RefreshBookmarkButton" Content="刷新" Click="RefreshBookmarkButton_Click" Width="70" Padding="0,3"/>
-                    </StackPanel>
-                    
-                    <!-- 收藏夹列表 -->
-                    <ListBox Grid.Row="1" Name="BookmarkListBox" SelectionMode="Single" 
-                             MouseDoubleClick="BookmarkListBox_MouseDoubleClick">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="150"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="Medium" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Url}" Foreground="Gray" FontSize="11" TextTrimming="CharacterEllipsis" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                    
-                    <!-- 状态栏 -->
-                    <TextBlock Grid.Row="2" Name="BookmarkStatusText" Margin="0,5,0,0" Foreground="Gray" FontSize="10"/>
-                </Grid>
+                <StackPanel Margin="20">
+                    <TextBlock Text="在独立窗口中管理书签，管理和编辑时仍可使用浏览器。"
+                               TextWrapping="Wrap" Margin="5,5,5,15"/>
+                    <Button Content="打开书签管理器" HorizontalAlignment="Left"
+                            Click="OpenBookmarkManager_Click"/>
+                </StackPanel>
             </TabItem>
 
             <TabItem Header="App 组" Name="AppGroupsTab">
@@ -361,8 +319,8 @@
                     </StackPanel>
                     <WrapPanel Grid.Row="1" Name="AppGroupActions">
                         <Button Content="导入组文件..." Click="ImportAppGroup_Click"/>
-                        <Button Content="把当前窗口保存成 App 组" Click="SaveAppGroup_Click"
-                                ToolTip="覆盖所选配置，仅保留当前窗口"/>
+                        <Button Content="把所有已开 App 保存成组" Click="SaveAppGroup_Click"
+                                ToolTip="用同一程序的所有运行实例覆盖所选配置，包括隐藏到托盘的实例"/>
                         <Button Content="当前配置另存为..." Click="SaveAppGroupAs_Click"/>
                         <Button Content="创建桌面快捷方式" Click="CreateAppGroupShortcut_Click"
                                 ToolTip="创建所选组的桌面快捷方式；打开时保留原有实例"/>
@@ -384,13 +342,14 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                             <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="*"/>
+                            <DataGridTextColumn Header="所属实例" Binding="{Binding Instance}" Width="80"/>
                             <DataGridTextColumn Header="快捷键" Binding="{Binding Hotkey}" Width="120"/>
                             <DataGridTemplateColumn Header="操作" Width="182">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Content="启动" Click="StartAppGroupItem_Click"
-                                                    ToolTip="仅启动此 App 到托盘，保留其他实例"
+                                                    ToolTip="启动此行所属实例的全部标签页到托盘，保留其他实例"
                                                     MinWidth="55" Margin="1" Padding="6,1"/>
                                             <Button Content="编辑" Click="EditAppGroupItem_Click"
                                                     MinWidth="55" Margin="1" Padding="6,1"/>
@@ -405,7 +364,7 @@
                     <StackPanel Grid.Row="3" Margin="5">
                         <TextBlock Name="AppGroupStatusText" TextWrapping="Wrap"/>
                         <TextBlock TextWrapping="Wrap" Foreground="Gray" Margin="0,5,0,0"
-                                   Text="点击图标更换 Logo，裁剪功能暂时停用。编辑可修改 URL、图标和快捷键。删除不再确认；移除配置会删除 JSON。保存当前窗口覆盖配置，另存为复制配置。加载组仅启动到托盘；加载并关闭仅退出当前实例。"/>
+                                   Text="每个 URL 一行，同一实例的页面加载时恢复到同一窗口。启动按钮恢复所属实例的全部标签页；编辑/删除只修改本行 URL，图标和快捷键由实例共享。删除不再确认；移除配置会删除 JSON。保存采集所有运行实例，另存为复制配置。加载组仅启动到托盘；加载并关闭仅退出当前实例。"/>
                     </StackPanel>
                 </Grid>
             </TabItem>

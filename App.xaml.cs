@@ -17,10 +17,11 @@ namespace TrayChrome
     {
         private TaskbarIcon? trayIcon;
         private MainWindow? mainWindow;
+        private BookmarkManagerWindow? bookmarkManagerWindow;
         private static int instanceCounter = 0;
         private int currentInstanceId;
         private List<Bookmark> bookmarks = new List<Bookmark>();
-        private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
+        private string bookmarksFilePath = BookmarkFolders.FilePath;
         
         // 全局快捷键管理器
         private GlobalHotKeyManager? hotKeyManager;
@@ -84,6 +85,7 @@ namespace TrayChrome
             double? customHeight = null; // 自定义窗口高度
             string? startupIcon = null;
             string? startupAppGroup = null;
+            var startupTabs = new List<string>();
             
             if (e.Args.Length > 0)
             {
@@ -91,6 +93,18 @@ namespace TrayChrome
                 for (int i = 0; i < e.Args.Length; i++)
                 {
                     string arg = e.Args[i];
+                    if (arg.Equals("--tab", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (++i >= e.Args.Length || !Uri.TryCreate(e.Args[i], UriKind.Absolute, out var tabUri)
+                            || (tabUri.Scheme != Uri.UriSchemeHttp && tabUri.Scheme != Uri.UriSchemeHttps))
+                        {
+                            MessageBox.Show("--tab 需要 HTTP 或 HTTPS 地址。", "启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                            Shutdown(1);
+                            return;
+                        }
+                        startupTabs.Add(e.Args[i]);
+                        continue;
+                    }
                     if (arg.Equals("--instance-hotkey", StringComparison.OrdinalIgnoreCase))
                     {
                         if (i + 1 >= e.Args.Length)
@@ -224,7 +238,7 @@ namespace TrayChrome
             }
             
             // 创建主窗口，传入启动参数
-            mainWindow = new MainWindow(startupUrl, shouldUseCleanMode, shouldForceUncleanMode, customWidth, customHeight);
+            mainWindow = new MainWindow(startupUrl, shouldUseCleanMode, shouldForceUncleanMode, customWidth, customHeight, startupTabs);
             LoadIconSetting();
             if (startupIcon != null)
             {
@@ -267,7 +281,7 @@ namespace TrayChrome
             InitializeGlobalHotKey();
             InitializeSettingsWatcher();
             instanceService = new InstanceService(CaptureCurrentApp,
-                () => mainWindow.webView.CoreWebView2 != null, () => Shutdown());
+                () => mainWindow.TabsReady, () => Shutdown());
             instanceService.Start();
             
             // 隐藏主窗口，只显示托盘图标
@@ -415,8 +429,6 @@ namespace TrayChrome
                     }
                     
                     var settingsWindow = new SettingsWindow(appSettings, mainWindow, this);
-                    // 订阅收藏夹更新事件
-                    settingsWindow.BookmarksUpdated += OnBookmarksUpdated;
                     // 订阅窗口关闭事件，在关闭时更新设置
                     settingsWindow.Closed += (s, args) =>
                     {
@@ -430,8 +442,6 @@ namespace TrayChrome
                             UpdateAnimationMenuState();
                             UpdateAdBlockMenuState();
                         }
-                        // 取消订阅事件
-                        settingsWindow.BookmarksUpdated -= OnBookmarksUpdated;
                     };
                     // 使用非模态窗口，不阻塞主线程
                     settingsWindow.Show();
@@ -443,12 +453,26 @@ namespace TrayChrome
             }
         }
 
+        public BookmarkManagerWindow OpenBookmarkManager()
+        {
+            if (bookmarkManagerWindow == null)
+            {
+                var manager = new BookmarkManagerWindow(this, mainWindow);
+                bookmarkManagerWindow = manager;
+                manager.Closed += (_, _) => bookmarkManagerWindow = null;
+            }
+            bookmarkManagerWindow.ActivateManager();
+            return bookmarkManagerWindow;
+        }
+
         public void OnBookmarksUpdated(object? sender, EventArgs e)
         {
             // 重新加载收藏夹并刷新托盘菜单 (LoadBookmarks 内部会调用 RefreshTrayBookmarkMenu)
             LoadBookmarks();
             // 同时更新主窗口的收藏夹菜单
             mainWindow?.LoadBookmarks();
+            if (!ReferenceEquals(sender, bookmarkManagerWindow))
+                bookmarkManagerWindow?.ReloadBookmarks();
         }
         
         private void UpdateAdBlockMenuState()
@@ -688,25 +712,7 @@ namespace TrayChrome
 
         private void EditBookmarkFromTray_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                if (!File.Exists(bookmarksFilePath))
-                {
-                    SaveBookmarks(); // 创建文件
-                }
-
-                string configFolder = Path.GetDirectoryName(bookmarksFilePath);
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = configFolder,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"打开收藏夹文件夹失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            OpenBookmarkManager();
         }
 
         private void CreateDesktopShortcut_Click(object sender, RoutedEventArgs e)
@@ -896,8 +902,7 @@ $Shortcut.Save()
 
                 if (File.Exists(bookmarksFilePath))
                 {
-                    var json = File.ReadAllText(bookmarksFilePath);
-                    bookmarks = JsonSerializer.Deserialize<List<Bookmark>>(json) ?? new List<Bookmark>();
+                    bookmarks = BookmarkFolders.Load(bookmarksFilePath);
                 }
                 else
                 {
@@ -924,8 +929,8 @@ $Shortcut.Save()
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(bookmarksFilePath));
-                var json = JsonSerializer.Serialize(bookmarks, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(bookmarksFilePath, json);
+                BookmarkFolders.Save(bookmarksFilePath, bookmarks);
+                OnBookmarksUpdated(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {
@@ -950,8 +955,18 @@ $Shortcut.Save()
                     }
 
                     // 添加所有收藏夹到菜单
-                    foreach (var bookmark in bookmarks)
+                    void Populate(ItemsControl parent, List<Bookmark> entries)
                     {
+                    foreach (var bookmark in entries)
+                    {
+                        if (bookmark.IsFolder)
+                        {
+                            var folderMenu = new MenuItem { Header = bookmark.Title };
+                            Populate(folderMenu, bookmark.Children);
+                            if (folderMenu.Items.Count == 0) folderMenu.Items.Add(new MenuItem { Header = "空文件夹", IsEnabled = false });
+                            parent.Items.Add(folderMenu);
+                            continue;
+                        }
                         MenuItem bookmarkItem = new MenuItem
                         {
                             Header = bookmark.Title,
@@ -961,6 +976,7 @@ $Shortcut.Save()
 
                         // 左键点击导航
                         bookmarkItem.Click += (s, args) => {
+                            args.Handled = true;
                             if (bookmarkItem.Tag != null && mainWindow?.webView?.CoreWebView2 != null)
                             {
                                 mainWindow.webView.CoreWebView2.Navigate(bookmarkItem.Tag.ToString());
@@ -984,7 +1000,7 @@ $Shortcut.Save()
                                 
                                 if (result == MessageBoxResult.Yes)
                                 {
-                                    bookmarks.Remove(bookmark);
+                                    entries.Remove(bookmark);
                                     SaveBookmarks();
                                     RefreshTrayBookmarkMenu();
                                     // 同时更新主窗口的收藏夹菜单
@@ -1007,7 +1023,7 @@ $Shortcut.Save()
                             
                             if (result == MessageBoxResult.Yes)
                             {
-                                bookmarks.Remove(bookmark);
+                                entries.Remove(bookmark);
                                 SaveBookmarks();
                                 RefreshTrayBookmarkMenu();
                                 // 同时更新主窗口的收藏夹菜单
@@ -1019,8 +1035,10 @@ $Shortcut.Save()
                         itemContextMenu.Items.Add(deleteItem);
                         bookmarkItem.ContextMenu = itemContextMenu;
 
-                        bookmarksMenuItem.Items.Add(bookmarkItem);
+                        parent.Items.Add(bookmarkItem);
                     }
+                    }
+                    Populate(bookmarksMenuItem, bookmarks);
                 }
             }
         }
@@ -1081,116 +1099,13 @@ $Shortcut.Save()
   • 极简模式下 Alt + 左键拖动移动窗口
   • Ctrl + Shift + L：聚焦地址栏
   • Ctrl + Shift + 点击链接：用默认浏览器打开
-  • Ctrl + Alt + Shift + T：切换设定透明度/完全不透明
   • 设置 > App 组：保存全部实例、导入和切换多组 JSON 文件";
 
             MessageBox.Show(helpText, "TrayChrome 帮助", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         private void EditTrayBookmark(Bookmark bookmark)
         {
-            // 创建编辑对话框
-            var dialog = new Window
-            {
-                Title = "编辑收藏夹",
-                Width = 400,
-                Height = 200,
-                WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                ResizeMode = ResizeMode.NoResize
-            };
-
-            var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            // 标题标签和文本框
-            var titleLabel = new Label { Content = "标题:", Margin = new Thickness(10, 10, 5, 5) };
-            Grid.SetRow(titleLabel, 0);
-            Grid.SetColumn(titleLabel, 0);
-            grid.Children.Add(titleLabel);
-
-            var titleTextBox = new TextBox 
-            { 
-                Text = bookmark.Title, 
-                Margin = new Thickness(5, 10, 10, 5),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetRow(titleTextBox, 0);
-            Grid.SetColumn(titleTextBox, 1);
-            grid.Children.Add(titleTextBox);
-
-            // URL标签和文本框
-            var urlLabel = new Label { Content = "URL:", Margin = new Thickness(10, 5, 5, 5) };
-            Grid.SetRow(urlLabel, 1);
-            Grid.SetColumn(urlLabel, 0);
-            grid.Children.Add(urlLabel);
-
-            var urlTextBox = new TextBox 
-            { 
-                Text = bookmark.Url, 
-                Margin = new Thickness(5, 5, 10, 5),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetRow(urlTextBox, 1);
-            Grid.SetColumn(urlTextBox, 1);
-            grid.Children.Add(urlTextBox);
-
-            // 按钮面板
-            var buttonPanel = new StackPanel 
-            { 
-                Orientation = Orientation.Horizontal, 
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(10, 20, 10, 10)
-            };
-            Grid.SetRow(buttonPanel, 2);
-            Grid.SetColumnSpan(buttonPanel, 2);
-
-            var okButton = new Button 
-            { 
-                Content = "确定", 
-                Width = 80, 
-                Height = 30, 
-                Margin = new Thickness(5, 0, 5, 0)
-            };
-            okButton.Click += (s, e) => {
-                if (!string.IsNullOrWhiteSpace(titleTextBox.Text) && !string.IsNullOrWhiteSpace(urlTextBox.Text))
-                {
-                    bookmark.Title = titleTextBox.Text.Trim();
-                    bookmark.Url = urlTextBox.Text.Trim();
-                    SaveBookmarks();
-                    RefreshTrayBookmarkMenu();
-                    // 同时更新主窗口的收藏夹菜单
-                    mainWindow?.RefreshBookmarkMenu();
-                    dialog.DialogResult = true;
-                    dialog.Close();
-                }
-                else
-                {
-                    MessageBox.Show("标题和URL不能为空！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            };
-
-            var cancelButton = new Button 
-            { 
-                Content = "取消", 
-                Width = 80, 
-                Height = 30, 
-                Margin = new Thickness(5, 0, 5, 0)
-            };
-            cancelButton.Click += (s, e) => {
-                dialog.DialogResult = false;
-                dialog.Close();
-            };
-
-            buttonPanel.Children.Add(okButton);
-            buttonPanel.Children.Add(cancelButton);
-            grid.Children.Add(buttonPanel);
-
-            dialog.Content = grid;
-            dialog.ShowDialog();
+            OpenBookmarkManager().EditBookmarkFromMenu(bookmark, bookmarks);
         }
 
         // 加载设置
@@ -1331,7 +1246,7 @@ $Shortcut.Save()
                         GlobalHotKeyManager.ParseHotkey(instanceHotkey, out modifiers, out key);
                     hotKeyManager = new GlobalHotKeyManager(mainWindow);
                     if (!hotKeyManager.RegisterHotKey(modifiers, key, ToggleMainWindow))
-                        throw new InvalidOperationException($"快捷键“{instanceHotkey ?? appSettings.Hotkey}”已被其他实例或程序占用，请更换。当前实例仍可通过托盘使用。");
+                        WriteDiagnostic($"Hotkey '{instanceHotkey ?? appSettings.Hotkey}' is already registered; skipping binding for this instance. Tray controls remain available.");
                 }
                 catch (Exception ex)
                 {

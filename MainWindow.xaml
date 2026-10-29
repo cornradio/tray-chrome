@@ -18,6 +18,98 @@
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
     
     <Window.Resources>
+        <Style x:Key="BrowserMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                <DockPanel>
+                                    <TextBlock Name="SubmenuArrow" Text="›" DockPanel.Dock="Right" Margin="12,0,0,0" Visibility="Collapsed"/>
+                                    <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+                                </DockPanel>
+                            </Border>
+                            <Popup Name="PART_Popup" Placement="Right" IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                   AllowsTransparency="True" Focusable="False">
+                                <Border Background="{DynamicResource BrowserMenuBackground}"
+                                        BorderBrush="{DynamicResource BrowserMenuDivider}" BorderThickness="1" Padding="4" CornerRadius="4">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource BrowserMenuHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="BrowserContextMenuStyle" TargetType="ContextMenu">
+            <Style.Resources>
+                <Style TargetType="MenuItem" BasedOn="{StaticResource BrowserMenuItemStyle}"/>
+                <Style TargetType="Separator">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Separator">
+                                <Border Height="1" Margin="8,4" Background="{DynamicResource BrowserMenuDivider}"/>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Style.Resources>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TabHeaderStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.75"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- 自定义按钮样式 -->
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -96,13 +188,30 @@
                          VerticalContentAlignment="Center"/>
 
                 <!-- 关闭按钮 -->
-                <Button Grid.Column="2" Name="CloseButton" Content="×" 
+                <Button Grid.Column="2" Name="CloseButton" Content="×"
                         Style="{StaticResource ToolbarButtonStyle}" Click="CloseButton_Click"/>
             </Grid>
         </Border>
         
         <!-- WebView2 浏览器控件 -->
-        <wv2:WebView2CompositionControl Grid.Row="1" Name="webView"/>
+        <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <DockPanel Name="TabToolbar" Background="{Binding Background, ElementName=TopToolbar}"
+                       Visibility="Collapsed">
+                <Button Name="NewTabButton" DockPanel.Dock="Right" Content="+"
+                        ToolTip="新标签页 (Ctrl+T)" Click="NewTab_Click" Width="28"
+                        Style="{StaticResource TabHeaderStyle}"/>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Name="TabHeaders" Orientation="Horizontal"/>
+                </ScrollViewer>
+            </DockPanel>
+            <Grid Grid.Row="1" Name="BrowserHost">
+                <wv2:WebView2 Name="webView"/>
+            </Grid>
+        </Grid>
         
         <!-- 底部功能按钮栏 -->
         <Border Grid.Row="2" Name="BottomToolbar" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">
@@ -142,14 +251,13 @@
                         Style="{StaticResource ToolbarButtonStyle}" Click="BookmarkButton_Click"
                         ToolTip="收藏夹">
                     <Button.ContextMenu>
-                        <ContextMenu Name="BookmarkContextMenu">
+                        <ContextMenu Name="BookmarkContextMenu" Style="{StaticResource BrowserContextMenuStyle}"
+                                     Opened="BrowserMenu_Opened">
                             <MenuItem Header="添加到收藏夹" Click="AddBookmark_Click"/>
                             <MenuItem Header="书签管理器" Click="ShowSettings_Bookmarks_Click"/>
                             <Separator Name="BookmarkSeparator"/>
                             <!-- 动态添加的收藏项将在这里 -->
                             <Separator Name="DynamicSeparatorEnd" Visibility="Collapsed"/>
-                            <Separator/>
-                            <MenuItem Header="open bookmark.json" Click="EditBookmarkJson_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

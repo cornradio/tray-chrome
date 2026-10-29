@@ -20,6 +20,7 @@ namespace TrayChrome
         public double Height { get; set; } = 640;
         public bool IsSuperMinimalMode { get; set; }
         public string Hotkey { get; set; } = string.Empty;
+        public List<string> Tabs { get; set; } = new();
     }
 
     public class AppGroup
@@ -153,6 +154,9 @@ namespace TrayChrome
             for (int i = 0; i < group.Apps.Count; i++)
             {
                 var entry = group.Apps[i] ?? throw new InvalidDataException($"第 {i + 1} 个 App 为空。");
+                if (entry.Tabs == null || entry.Tabs.Any(url => !Uri.TryCreate(url, UriKind.Absolute, out var tabUri)
+                    || (tabUri.Scheme != Uri.UriSchemeHttp && tabUri.Scheme != Uri.UriSchemeHttps)))
+                    throw new InvalidDataException($"第 {i + 1} 个 App 的标签页必须是 HTTP 或 HTTPS 地址。");
                 if (!Uri.TryCreate(entry.Url, UriKind.Absolute, out var uri)
                     || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                     throw new InvalidDataException($"第 {i + 1} 个 App 的 URL 必须是 HTTP 或 HTTPS 地址。");
@@ -214,6 +218,11 @@ namespace TrayChrome
                 ?? throw new InvalidOperationException("无法获取程序路径。")) { UseShellExecute = false };
             start.ArgumentList.Add("--url");
             start.ArgumentList.Add(entry.Url);
+            foreach (string tab in entry.Tabs)
+            {
+                start.ArgumentList.Add("--tab");
+                start.ArgumentList.Add(tab);
+            }
             start.ArgumentList.Add("--icon");
             start.ArgumentList.Add(entry.IconPath);
             start.ArgumentList.Add("--instance-hotkey");

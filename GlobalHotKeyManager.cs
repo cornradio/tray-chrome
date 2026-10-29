@@ -16,7 +16,7 @@ namespace TrayChrome
         private const int MOD_WIN = 0x0008;
 
         // Windows API 函数
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
         [DllImport("user32.dll")]
@@ -50,10 +50,16 @@ namespace TrayChrome
             var handle = helper.Handle;
             
             if (handle == IntPtr.Zero)
-                return false;
+                throw new InvalidOperationException("无法获取注册快捷键所需的窗口句柄。");
 
             // 注册热键
             bool success = RegisterHotKey(handle, _hotKeyId, modifiers | 0x4000, virtualKey);
+            if (!success)
+            {
+                int error = Marshal.GetLastWin32Error();
+                if (error == 1409) return false; // ERROR_HOTKEY_ALREADY_REGISTERED
+                throw new System.ComponentModel.Win32Exception(error, "注册全局快捷键失败。");
+            }
             
             if (success)
             {

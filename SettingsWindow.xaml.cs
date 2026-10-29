@@ -17,15 +17,10 @@ namespace TrayChrome
         private AppSettings currentSettings;
         private MainWindow? mainWindow;
         private App? app;
-        private List<Bookmark> bookmarks = new List<Bookmark>();
-        private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
 
         // 当前版本号
-        private const string CurrentVersion = "2.1.0";
+        private const string CurrentVersion = "2.2.0";
 
-        // 收藏夹更新事件
-        public event EventHandler? BookmarksUpdated;
-        
         // 标记设置是否已保存（用于非模态窗口）
         public bool SettingsSaved { get; private set; } = false;
         
@@ -91,8 +86,7 @@ namespace TrayChrome
                 ProxyServer = settings.ProxyServer,
                 AutoZoomOutOnStartup = settings.AutoZoomOutOnStartup,
                 EnableRoundedCorners = settings.EnableRoundedCorners,
-                CornerRadiusPx = settings.CornerRadiusPx,
-                WindowOpacity = settings.WindowOpacity
+                CornerRadiusPx = settings.CornerRadiusPx
             };
             
             // 加载当前设置到UI
@@ -104,9 +98,6 @@ namespace TrayChrome
             // 加载当前图标设置
             LoadIconSetting();
             
-            // 加载收藏夹
-            LoadBookmarks();
-            RefreshBookmarkList();
             InitializeAppGroups();
         }
 
@@ -134,7 +125,6 @@ namespace TrayChrome
 
         private void SetupDataBinding()
         {
-            OpacitySlider.Value = currentSettings.WindowOpacity * 100;
             // 窗口大小 - 使用事件处理
             WidthTextBox.Text = WindowWidth.ToString();
             HeightTextBox.Text = WindowHeight.ToString();
@@ -341,7 +331,6 @@ namespace TrayChrome
                 // 更新设置对象
                 currentSettings.WindowWidth = width;
                 currentSettings.WindowHeight = height;
-                currentSettings.WindowOpacity = OpacitySlider.Value / 100;
                 currentSettings.IsTopMost = IsTopMost;
                 currentSettings.IsSuperMinimalMode = IsSuperMinimalMode;
                 currentSettings.IsAnimationEnabled = IsAnimationEnabled;
@@ -490,307 +479,11 @@ namespace TrayChrome
             target.AutoZoomOutOnStartup = source.AutoZoomOutOnStartup;
             target.EnableRoundedCorners = source.EnableRoundedCorners;
             target.CornerRadiusPx = source.CornerRadiusPx;
-            target.WindowOpacity = source.WindowOpacity;
         }
 
-        // 收藏夹管理方法
-        private void LoadBookmarks()
+        private void OpenBookmarkManager_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(bookmarksFilePath));
-                
-                if (File.Exists(bookmarksFilePath))
-                {
-                    var json = File.ReadAllText(bookmarksFilePath);
-                    bookmarks = System.Text.Json.JsonSerializer.Deserialize<List<Bookmark>>(json) ?? new List<Bookmark>();
-                }
-                else
-                {
-                    bookmarks = new List<Bookmark>();
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"加载收藏夹失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-                bookmarks = new List<Bookmark>();
-            }
-        }
-
-        private void SaveBookmarks()
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(bookmarksFilePath));
-                var json = System.Text.Json.JsonSerializer.Serialize(bookmarks, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(bookmarksFilePath, json);
-                
-                // 同步到主窗口和托盘图标
-                if (app != null)
-                {
-                    app.OnBookmarksUpdated(this, EventArgs.Empty);
-                }
-                else if (mainWindow != null)
-                {
-                    mainWindow.LoadBookmarks();
-                    BookmarksUpdated?.Invoke(this, EventArgs.Empty);
-                }
-                else
-                {
-                    BookmarksUpdated?.Invoke(this, EventArgs.Empty);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"保存收藏夹失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        private void RefreshBookmarkList()
-        {
-            BookmarkListBox.ItemsSource = null;
-            BookmarkListBox.ItemsSource = bookmarks;
-            BookmarkStatusText.Text = $"共 {bookmarks.Count} 个收藏";
-        }
-
-        private void AddBookmarkButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string currentUrl = mainWindow?.webView?.CoreWebView2?.Source ?? "";
-                string currentTitle = mainWindow?.webView?.CoreWebView2?.DocumentTitle ?? "未知页面";
-                
-                if (string.IsNullOrEmpty(currentUrl))
-                {
-                    // 如果没有当前URL，显示输入对话框
-                    var dialog = new Window
-                    {
-                        Title = "添加收藏",
-                        Width = 400,
-                        Height = 200,
-                        WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                        Owner = this,
-                        ResizeMode = ResizeMode.NoResize
-                    };
-
-                    var grid = new Grid();
-                    grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                    grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                    grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-                    var titleLabel = new Label { Content = "标题:", Margin = new Thickness(10, 10, 5, 5) };
-                    Grid.SetRow(titleLabel, 0);
-                    Grid.SetColumn(titleLabel, 0);
-                    grid.Children.Add(titleLabel);
-
-                    var titleTextBox = new TextBox { Margin = new Thickness(5, 10, 10, 5), VerticalAlignment = VerticalAlignment.Center };
-                    Grid.SetRow(titleTextBox, 0);
-                    Grid.SetColumn(titleTextBox, 1);
-                    grid.Children.Add(titleTextBox);
-
-                    var urlLabel = new Label { Content = "URL:", Margin = new Thickness(10, 5, 5, 5) };
-                    Grid.SetRow(urlLabel, 1);
-                    Grid.SetColumn(urlLabel, 0);
-                    grid.Children.Add(urlLabel);
-
-                    var urlTextBox = new TextBox { Margin = new Thickness(5, 5, 10, 5), VerticalAlignment = VerticalAlignment.Center };
-                    Grid.SetRow(urlTextBox, 1);
-                    Grid.SetColumn(urlTextBox, 1);
-                    grid.Children.Add(urlTextBox);
-
-                    var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(10, 20, 10, 10) };
-                    Grid.SetRow(buttonPanel, 2);
-                    Grid.SetColumnSpan(buttonPanel, 2);
-
-                    var okButton = new Button { Content = "确定", Width = 80, Height = 30, Margin = new Thickness(5, 0, 5, 0) };
-                    okButton.Click += (s, args) =>
-                    {
-                        if (!string.IsNullOrWhiteSpace(titleTextBox.Text) && !string.IsNullOrWhiteSpace(urlTextBox.Text))
-                        {
-                            var newBookmark = new Bookmark
-                            {
-                                Title = titleTextBox.Text.Trim(),
-                                Url = urlTextBox.Text.Trim()
-                            };
-                            
-                            if (!bookmarks.Any(b => b.Url.Equals(newBookmark.Url, StringComparison.OrdinalIgnoreCase)))
-                            {
-                                bookmarks.Add(newBookmark);
-                                SaveBookmarks();
-                                RefreshBookmarkList();
-                                dialog.DialogResult = true;
-                                dialog.Close();
-                            }
-                            else
-                            {
-                                MessageBox.Show("该URL已在收藏夹中！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-                            }
-                        }
-                        else
-                        {
-                            MessageBox.Show("标题和URL不能为空！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        }
-                    };
-
-                    var cancelButton = new Button { Content = "取消", Width = 80, Height = 30, Margin = new Thickness(5, 0, 5, 0) };
-                    cancelButton.Click += (s, args) => { dialog.DialogResult = false; dialog.Close(); };
-
-                    buttonPanel.Children.Add(okButton);
-                    buttonPanel.Children.Add(cancelButton);
-                    grid.Children.Add(buttonPanel);
-
-                    dialog.Content = grid;
-                    dialog.ShowDialog();
-                }
-                else
-                {
-                    // 使用当前页面URL
-                    if (!bookmarks.Any(b => b.Url.Equals(currentUrl, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        var newBookmark = new Bookmark
-                        {
-                            Title = currentTitle,
-                            Url = currentUrl
-                        };
-                        bookmarks.Add(newBookmark);
-                        SaveBookmarks();
-                        RefreshBookmarkList();
-                        MessageBox.Show($"已添加到收藏夹：{currentTitle}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                    else
-                    {
-                        MessageBox.Show("该页面已在收藏夹中！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"添加收藏失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void EditBookmarkButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (BookmarkListBox.SelectedItem is Bookmark bookmark)
-            {
-                EditBookmark(bookmark);
-            }
-            else
-            {
-                MessageBox.Show("请先选择一个收藏项！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-        }
-
-        private void DeleteBookmarkButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (BookmarkListBox.SelectedItem is Bookmark bookmark)
-            {
-                var result = MessageBox.Show($"确定要删除收藏夹 \"{bookmark.Title}\" 吗？", 
-                    "删除收藏夹", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                
-                if (result == MessageBoxResult.Yes)
-                {
-                    bookmarks.Remove(bookmark);
-                    SaveBookmarks();
-                    RefreshBookmarkList();
-                }
-            }
-            else
-            {
-                MessageBox.Show("请先选择一个收藏项！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-        }
-
-        private void RefreshBookmarkButton_Click(object sender, RoutedEventArgs e)
-        {
-            LoadBookmarks();
-            RefreshBookmarkList();
-        }
-
-        private void BookmarkListBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if (BookmarkListBox.SelectedItem is Bookmark bookmark && mainWindow?.webView?.CoreWebView2 != null)
-            {
-                mainWindow.webView.CoreWebView2.Navigate(bookmark.Url);
-                if (!mainWindow.IsVisible)
-                {
-                    mainWindow.ShowWithAnimation();
-                }
-            }
-        }
-
-        private void EditBookmark(Bookmark bookmark)
-        {
-            var dialog = new Window
-            {
-                Title = "编辑收藏夹",
-                Width = 400,
-                Height = 200,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = this,
-                ResizeMode = ResizeMode.NoResize
-            };
-
-            var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var titleLabel = new Label { Content = "标题:", Margin = new Thickness(10, 10, 5, 5) };
-            Grid.SetRow(titleLabel, 0);
-            Grid.SetColumn(titleLabel, 0);
-            grid.Children.Add(titleLabel);
-
-            var titleTextBox = new TextBox { Text = bookmark.Title, Margin = new Thickness(5, 10, 10, 5), VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetRow(titleTextBox, 0);
-            Grid.SetColumn(titleTextBox, 1);
-            grid.Children.Add(titleTextBox);
-
-            var urlLabel = new Label { Content = "URL:", Margin = new Thickness(10, 5, 5, 5) };
-            Grid.SetRow(urlLabel, 1);
-            Grid.SetColumn(urlLabel, 0);
-            grid.Children.Add(urlLabel);
-
-            var urlTextBox = new TextBox { Text = bookmark.Url, Margin = new Thickness(5, 5, 10, 5), VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetRow(urlTextBox, 1);
-            Grid.SetColumn(urlTextBox, 1);
-            grid.Children.Add(urlTextBox);
-
-            var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(10, 20, 10, 10) };
-            Grid.SetRow(buttonPanel, 2);
-            Grid.SetColumnSpan(buttonPanel, 2);
-
-            var okButton = new Button { Content = "确定", Width = 80, Height = 30, Margin = new Thickness(5, 0, 5, 0) };
-            okButton.Click += (s, args) =>
-            {
-                if (!string.IsNullOrWhiteSpace(titleTextBox.Text) && !string.IsNullOrWhiteSpace(urlTextBox.Text))
-                {
-                    bookmark.Title = titleTextBox.Text.Trim();
-                    bookmark.Url = urlTextBox.Text.Trim();
-                    SaveBookmarks();
-                    RefreshBookmarkList();
-                    dialog.DialogResult = true;
-                    dialog.Close();
-                }
-                else
-                {
-                    MessageBox.Show("标题和URL不能为空！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            };
-
-            var cancelButton = new Button { Content = "取消", Width = 80, Height = 30, Margin = new Thickness(5, 0, 5, 0) };
-            cancelButton.Click += (s, args) => { dialog.DialogResult = false; dialog.Close(); };
-
-            buttonPanel.Children.Add(okButton);
-            buttonPanel.Children.Add(cancelButton);
-            grid.Children.Add(buttonPanel);
-
-            dialog.Content = grid;
-            dialog.ShowDialog();
+            (app ?? Application.Current as App)?.OpenBookmarkManager();
         }
 
         private void GitHubButton_Click(object sender, RoutedEventArgs e)
