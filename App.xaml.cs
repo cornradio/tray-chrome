@@ -9,6 +9,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Globalization;
 
 namespace TrayChrome
 {
@@ -26,6 +27,10 @@ namespace TrayChrome
         private AppSettings appSettings = new AppSettings();
         private string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
         private FileSystemWatcher? settingsWatcher;
+        private string currentIconPath = IconSettings.DefaultPath;
+        public string CurrentIconPath => currentIconPath;
+        private InstanceService? instanceService;
+        private string? instanceHotkey;
 
         // 验证URL格式的辅助方法
         private bool IsValidUrl(string url)
@@ -47,7 +52,9 @@ namespace TrayChrome
             if (parts.Length != 2)
                 return false;
                 
-            if (double.TryParse(parts[0], out width) && double.TryParse(parts[1], out height))
+            if ((double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out width)
+                && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out height))
+                || (double.TryParse(parts[0], out width) && double.TryParse(parts[1], out height)))
             {
                 // 验证尺寸范围
                 if (width >= 200 && width <= 3840 && height >= 150 && height <= 2160)
@@ -61,6 +68,7 @@ namespace TrayChrome
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            WriteDiagnostic($"Startup; runtime={Environment.Version}; OS={Environment.OSVersion}; base={AppDomain.CurrentDomain.BaseDirectory}");
             base.OnStartup(e);
 
             // 分配实例ID
@@ -74,6 +82,8 @@ namespace TrayChrome
             bool shouldShowHelp = false; // 是否显示帮助信息
             double? customWidth = null; // 自定义窗口宽度
             double? customHeight = null; // 自定义窗口高度
+            string? startupIcon = null;
+            string? startupAppGroup = null;
             
             if (e.Args.Length > 0)
             {
@@ -81,6 +91,49 @@ namespace TrayChrome
                 for (int i = 0; i < e.Args.Length; i++)
                 {
                     string arg = e.Args[i];
+                    if (arg.Equals("--instance-hotkey", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (i + 1 >= e.Args.Length)
+                        {
+                            MessageBox.Show("--instance-hotkey 需要快捷键参数。", "启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                            Shutdown(1);
+                            return;
+                        }
+                        instanceHotkey = e.Args[++i];
+                        try
+                        {
+                            if (!string.IsNullOrWhiteSpace(instanceHotkey))
+                                instanceHotkey = GlobalHotKeyManager.ParseHotkey(instanceHotkey, out _, out _);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            MessageBox.Show(ex.Message, "快捷键无效", MessageBoxButton.OK, MessageBoxImage.Error);
+                            Shutdown(1);
+                            return;
+                        }
+                        continue;
+                    }
+                    if (arg.StartsWith("--app-group=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        startupAppGroup = arg.Substring("--app-group=".Length);
+                        continue;
+                    }
+                    if (arg.Equals("--app-group", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (i + 1 >= e.Args.Length || e.Args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                        {
+                            MessageBox.Show("--app-group 需要指定 JSON 文件路径。", "启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                            Shutdown(1);
+                            return;
+                        }
+                        startupAppGroup = e.Args[++i];
+                        continue;
+                    }
+                    if (arg.Equals("--icon", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+                    {
+                        startupIcon = e.Args[++i];
+                        continue;
+                    }
                     
                     // 支持 --url=https://example.com 格式
                     if (arg.StartsWith("--url=", StringComparison.OrdinalIgnoreCase))
@@ -150,6 +203,17 @@ namespace TrayChrome
                 return;
             }
 
+            if (startupAppGroup != null)
+            {
+                ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    bool loaded = await LoadAppGroupAsync(startupAppGroup);
+                    Shutdown(loaded ? 0 : 1);
+                }));
+                return;
+            }
+
             // 创建托盘图标
             trayIcon = (TaskbarIcon)FindResource("TrayIcon");
             
@@ -161,6 +225,17 @@ namespace TrayChrome
             
             // 创建主窗口，传入启动参数
             mainWindow = new MainWindow(startupUrl, shouldUseCleanMode, shouldForceUncleanMode, customWidth, customHeight);
+            LoadIconSetting();
+            if (startupIcon != null)
+            {
+                try { SetApplicationIcon(startupIcon); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"加载启动图标失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Shutdown(1);
+                    return;
+                }
+            }
             
             // 根据 --open 参数决定是否显示窗口
             if (shouldOpen)
@@ -191,18 +266,18 @@ namespace TrayChrome
             LoadSettings();
             InitializeGlobalHotKey();
             InitializeSettingsWatcher();
+            instanceService = new InstanceService(CaptureCurrentApp,
+                () => mainWindow.webView.CoreWebView2 != null, () => Shutdown());
+            instanceService.Start();
             
             // 隐藏主窗口，只显示托盘图标
             MainWindow = mainWindow;
-            if (!shouldOpen)
-            {
-                MainWindow.WindowState = WindowState.Minimized;
-            }
             MainWindow.ShowInTaskbar = false;
         }
 
         private void TrayIcon_TrayLeftMouseUp(object sender, RoutedEventArgs e)
         {
+            WriteDiagnostic($"Tray left click; visible={mainWindow?.IsVisible}; state={mainWindow?.WindowState}");
             if (mainWindow != null)
             {
                 if (mainWindow.IsVisible)
@@ -220,6 +295,7 @@ namespace TrayChrome
 
         private void AddInstance_Click(object sender, RoutedEventArgs e)
         {
+            if (trayIcon?.ContextMenu != null) trayIcon.ContextMenu.IsOpen = false;
             try
             {
                 // 启动新的应用程序实例
@@ -259,27 +335,10 @@ namespace TrayChrome
 
         private void RestartInstance_Click(object sender, RoutedEventArgs e)
         {
+            if (trayIcon?.ContextMenu != null) trayIcon.ContextMenu.IsOpen = false;
             try
             {
-                string args = "--open";
-                if (mainWindow?.webView?.CoreWebView2 != null)
-                {
-                    string currentUrl = mainWindow.webView.CoreWebView2.Source;
-                    if (!string.IsNullOrEmpty(currentUrl))
-                    {
-                        args += $" --url \"{currentUrl}\"";
-                    }
-                }
-
-                // 启动新的应用程序实例
-                string currentExecutable = Process.GetCurrentProcess().MainModule?.FileName ?? "";
-                if (!string.IsNullOrEmpty(currentExecutable))
-                {
-                    Process.Start(currentExecutable, args);
-                }
-                
-                // 关闭当前实例
-                Application.Current.Shutdown();
+                RestartCurrentInstance();
             }
             catch (Exception ex)
             {
@@ -289,13 +348,14 @@ namespace TrayChrome
 
         private void CloseInstance_Click(object sender, RoutedEventArgs e)
         {
+            if (trayIcon?.ContextMenu != null) trayIcon.ContextMenu.IsOpen = false;
             // 关闭当前实例
             Application.Current.Shutdown();
         }
 
-        private void ResetWindowPosition_Click(object sender, RoutedEventArgs e)
+        private void ResetWindowSizeAndPosition_Click(object sender, RoutedEventArgs e)
         {
-            mainWindow?.ResetWindowPosition();
+            mainWindow?.ResetWindowSizeAndPosition();
         }
 
         private void SuperMinimalMode_Click(object sender, RoutedEventArgs e)
@@ -478,266 +538,94 @@ namespace TrayChrome
             }
         }
 
-        private void SetCustomIcon_Click(object sender, RoutedEventArgs e)
+        private async void SetCustomIcon_Click(object sender, RoutedEventArgs e)
         {
+            if (isSelectingCustomIcon) return;
+            isSelectingCustomIcon = true;
             try
             {
-                // 创建文件选择对话框
-                var openFileDialog = new Microsoft.Win32.OpenFileDialog();
-                
-                // 设置对话框属性
-                openFileDialog.Title = "选择图标文件";
-                openFileDialog.Filter = "图标文件 (*.ico)|*.ico|PNG图片 (*.png)|*.png|所有文件 (*.*)|*.*";
-                openFileDialog.FilterIndex = 1;
-                openFileDialog.CheckFileExists = true;
-                openFileDialog.CheckPathExists = true;
-                openFileDialog.Multiselect = false;
-                openFileDialog.RestoreDirectory = true;
-                
-                // 设置初始目录为用户的桌面
-                openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-
-                // 显示对话框并获取结果
-                Window owner = null;
-                if (mainWindow != null && mainWindow.IsVisible)
+                WriteDiagnostic("Custom icon: closing tray context menu");
+                if (trayIcon?.ContextMenu != null) trayIcon.ContextMenu.IsOpen = false;
+                // 等托盘菜单的原生消息回调返回，再进入文件选择框的模态消息循环。
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                string targetPath = IconSettings.SelectAndImport(mainWindow?.IsVisible == true ? mainWindow : null);
+                if (targetPath != null)
                 {
-                    owner = mainWindow;
-                }
-                else
-                {
-                    // 如果主窗口不可见，尝试获取当前活动窗口
-                    owner = Application.Current.MainWindow;
-                }
-                
-                bool? dialogResult;
-                if (owner != null)
-                {
-                    dialogResult = openFileDialog.ShowDialog(owner);
-                }
-                else
-                {
-                    dialogResult = openFileDialog.ShowDialog();
-                }
-
-                if (dialogResult == true && !string.IsNullOrEmpty(openFileDialog.FileName))
-                {
-                    string selectedPath = openFileDialog.FileName;
-                    
-                    // 验证文件是否存在和可读
-                    if (!File.Exists(selectedPath))
-                    {
-                        MessageBox.Show("选择的文件不存在！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-
-                    // 验证文件大小（不超过5MB）
-                    var fileInfo = new FileInfo(selectedPath);
-                    if (fileInfo.Length > 5 * 1024 * 1024)
-                    {
-                        MessageBox.Show("图标文件过大，请选择小于5MB的文件！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-
-                    // 验证图标文件是否有效
-                    if (!IsValidIconFile(selectedPath))
-                    {
-                        MessageBox.Show("选择的文件不是有效的图标文件！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-                    
-                    // 复制图标到应用程序目录
-                    string customIconsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "custom-icons");
-                    Directory.CreateDirectory(customIconsDir);
-                    
-                    string fileName = $"custom_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(selectedPath)}";
-                    string targetPath = Path.Combine(customIconsDir, fileName);
-                    
-                    File.Copy(selectedPath, targetPath, true);
-                    
+                    WriteDiagnostic("Custom icon: applying imported image");
                     SetApplicationIcon(targetPath);
                     SaveIconSetting("custom", targetPath);
+                    WriteDiagnostic("Custom icon: saved");
                     
                     MessageBox.Show("自定义图标设置成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             catch (Exception ex)
             {
-                // 显示详细的错误信息用于调试
-                string errorMessage = $"错误类型: {ex.GetType().Name}\n错误信息: {ex.Message}\n堆栈跟踪: {ex.StackTrace}";
-                MessageBox.Show(errorMessage, "详细错误信息", MessageBoxButton.OK, MessageBoxImage.Error);
-                
-                // 同时输出到调试控制台
-                System.Diagnostics.Debug.WriteLine($"SetCustomIcon_Click异常详情: {ex}");
+                WriteDiagnostic("Set custom icon failed", ex);
+                MessageBox.Show($"设置自定义图标失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally { isSelectingCustomIcon = false; }
         }
 
-        private bool IsValidIconFile(string filePath)
-        {
-            try
-            {
-                string extension = Path.GetExtension(filePath).ToLower();
-                
-                if (extension == ".ico")
-                {
-                    // 尝试创建Icon对象来验证ICO文件
-                    using (var icon = new System.Drawing.Icon(filePath))
-                    {
-                        return icon.Width > 0 && icon.Height > 0;
-                    }
-                }
-                else if (extension == ".png")
-                {
-                    // 尝试创建BitmapImage来验证PNG文件
-                    var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(filePath, UriKind.Absolute);
-                    bitmap.EndInit();
-                    return bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0;
-                }
-                
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        private bool isSelectingCustomIcon;
 
         public void SetApplicationIcon(string iconPath)
         {
-            try
-            {
-                // 设置托盘图标
-                if (trayIcon != null)
-                {
-                    if (iconPath.StartsWith("pack://"))
-                    {
-                        // 使用资源图标
-                        var iconUri = new Uri(iconPath);
-                        var iconStream = Application.GetResourceStream(iconUri);
-                        if (iconStream != null)
-                        {
-                            // 需要重新创建流，因为Icon构造函数会关闭流
-                            var memoryStream = new MemoryStream();
-                            iconStream.Stream.CopyTo(memoryStream);
-                            memoryStream.Position = 0;
-                            
-                            // 释放旧图标
-                            trayIcon.Icon?.Dispose();
-                            trayIcon.Icon = new System.Drawing.Icon(memoryStream);
-                        }
-                    }
-                    else if (File.Exists(iconPath))
-                    {
-                        // 使用文件图标
-                        string extension = Path.GetExtension(iconPath).ToLower();
-                        
-                        if (extension == ".ico")
-                        {
-                            // 释放旧图标
-                            trayIcon.Icon?.Dispose();
-                            trayIcon.Icon = new System.Drawing.Icon(iconPath);
-                        }
-                        else if (extension == ".png")
-                        {
-                            // 将PNG转换为Icon
-                            using (var bitmap = new System.Drawing.Bitmap(iconPath))
-                            {
-                                var hIcon = bitmap.GetHicon();
-                                // 释放旧图标
-                                trayIcon.Icon?.Dispose();
-                                trayIcon.Icon = System.Drawing.Icon.FromHandle(hIcon);
-                            }
-                        }
-                    }
-                }
+            IconSettings.ValidatePath(iconPath);
+            var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
+            bitmapImage.BeginInit();
+            bitmapImage.UriSource = new Uri(iconPath, UriKind.Absolute);
+            bitmapImage.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bitmapImage.EndInit();
 
-                // 设置窗口图标
-                if (mainWindow != null)
+            System.Drawing.Icon newIcon;
+            using var stream = iconPath.StartsWith("pack://", StringComparison.Ordinal)
+                ? Application.GetResourceStream(new Uri(iconPath)).Stream
+                : File.OpenRead(iconPath);
+            if (Path.GetExtension(iconPath).Equals(".ico", StringComparison.OrdinalIgnoreCase))
+            {
+                using var loaded = new System.Drawing.Icon(stream);
+                newIcon = (System.Drawing.Icon)loaded.Clone();
+            }
+            else
+            {
+                using var bitmap = new System.Drawing.Bitmap(stream);
+                var handle = bitmap.GetHicon();
+                try
                 {
-                    if (iconPath.StartsWith("pack://"))
-                    {
-                        var iconUri = new Uri(iconPath);
-                        var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
-                        bitmapImage.BeginInit();
-                        bitmapImage.UriSource = iconUri;
-                        bitmapImage.EndInit();
-                        mainWindow.Icon = bitmapImage;
-                    }
-                    else if (File.Exists(iconPath))
-                    {
-                        var iconUri = new Uri(iconPath, UriKind.Absolute);
-                        var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
-                        bitmapImage.BeginInit();
-                        bitmapImage.UriSource = iconUri;
-                        bitmapImage.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                        bitmapImage.EndInit();
-                        mainWindow.Icon = bitmapImage;
-                    }
+                    using var borrowedIcon = System.Drawing.Icon.FromHandle(handle);
+                    newIcon = (System.Drawing.Icon)borrowedIcon.Clone();
                 }
+                finally { DestroyIcon(handle); }
             }
-            catch (ArgumentException argEx)
+            if (trayIcon != null)
             {
-                MessageBox.Show($"图标文件格式不正确: {argEx.Message}", "格式错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                var previous = trayIcon.Icon;
+                trayIcon.Icon = newIcon;
+                previous?.Dispose();
             }
-            catch (OutOfMemoryException)
-            {
-                MessageBox.Show("内存不足，无法加载图标文件！", "内存错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"应用图标失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            else newIcon.Dispose();
+            if (mainWindow != null) mainWindow.Icon = bitmapImage;
+            currentIconPath = iconPath;
         }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool DestroyIcon(IntPtr handle);
 
         public void SaveIconSetting(string iconType, string iconPath)
         {
-            try
-            {
-                string settingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon-settings.json");
-                
-                var settings = new
-                {
-                    IconType = iconType,
-                    IconPath = iconPath,
-                    LastUpdated = DateTime.Now
-                };
-                
-                string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(settingsFile, json);
-            }
-            catch (Exception ex)
-            {
-                // 静默处理保存错误，不影响图标设置
-                System.Diagnostics.Debug.WriteLine($"保存图标设置失败: {ex.Message}");
-            }
+            new IconSettings { IconType = iconType, IconPath = iconPath }.Save();
         }
 
         private void LoadIconSetting()
         {
             try
             {
-                string settingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon-settings.json");
-                
-                if (File.Exists(settingsFile))
-                {
-                    string json = File.ReadAllText(settingsFile);
-                    var settings = JsonSerializer.Deserialize<JsonElement>(json);
-                    
-                    if (settings.TryGetProperty("IconPath", out var iconPathElement))
-                    {
-                        string iconPath = iconPathElement.GetString() ?? "";
-                        if (!string.IsNullOrEmpty(iconPath))
-                        {
-                            SetApplicationIcon(iconPath);
-                        }
-                    }
-                }
+                SetApplicationIcon(IconSettings.Load().IconPath);
             }
             catch (Exception ex)
             {
-                // 静默处理加载错误，使用默认图标
-                System.Diagnostics.Debug.WriteLine($"加载图标设置失败: {ex.Message}");
+                MessageBox.Show($"加载图标设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -752,6 +640,7 @@ namespace TrayChrome
 
         protected override void OnExit(ExitEventArgs e)
         {
+            WriteDiagnostic($"Exit; code={e.ApplicationExitCode}");
             // 取消订阅事件
             if (mainWindow != null)
             {
@@ -760,6 +649,7 @@ namespace TrayChrome
             
             // 清理全局快捷键资源
             hotKeyManager?.Dispose();
+            instanceService?.Dispose();
             
             // 清理文件监听器
             settingsWatcher?.Dispose();
@@ -897,7 +787,7 @@ namespace TrayChrome
             return string.Empty;
         }
 
-        private void CreateDesktopShortcut(string url, string title)
+        private string CreateDesktopShortcut(string url, string title, string? arguments = null)
          {
              try
              {
@@ -955,10 +845,11 @@ namespace TrayChrome
                  
                  // 使用PowerShell创建Windows快捷方式
                  string psScript = $@"
+$ErrorActionPreference = 'Stop'
 $WshShell = New-Object -comObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut('{shortcutPath.Replace("'", "''")}')
 $Shortcut.TargetPath = '{appPath.Replace("'", "''")}'
-$Shortcut.Arguments = '--url ""{url}"" --open{sizeArgument}'
+$Shortcut.Arguments = '{(arguments ?? $"--url \"{url}\" --open{sizeArgument}").Replace("'", "''")}'
 $Shortcut.Description = 'TrayChrome - {title.Replace("'", "''")}'
 $Shortcut.IconLocation = '{appPath.Replace("'", "''")}' + ',0'
 $Shortcut.WorkingDirectory = '{Path.GetDirectoryName(appPath)?.Replace("'", "''")}'
@@ -968,7 +859,8 @@ $Shortcut.Save()
                  ProcessStartInfo psi = new ProcessStartInfo
                  {
                      FileName = "powershell.exe",
-                     Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{psScript.Replace("\"", "\\\"")}\"",
+                     Arguments = "-NoProfile -NonInteractive -EncodedCommand "
+                         + Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(psScript)),
                      UseShellExecute = false,
                      CreateNoWindow = true,
                      RedirectStandardOutput = true,
@@ -977,17 +869,22 @@ $Shortcut.Save()
                  
                  using (Process process = Process.Start(psi))
                  {
-                     process?.WaitForExit();
-                     if (process?.ExitCode != 0)
+                     if (process == null) throw new InvalidOperationException("无法启动快捷方式创建进程。");
+                     var output = process.StandardOutput.ReadToEndAsync();
+                     var error = process.StandardError.ReadToEndAsync();
+                     process.WaitForExit();
+                     Task.WaitAll(output, error);
+                     if (process.ExitCode != 0)
                      {
-                         string error = process.StandardError.ReadToEnd();
-                         throw new Exception($"PowerShell执行失败: {error}");
+                         throw new Exception($"PowerShell执行失败: {error.Result}");
                      }
                  }
+                 if (!File.Exists(shortcutPath)) throw new IOException("快捷方式文件未创建。");
+                 return shortcutPath;
              }
              catch (Exception ex)
              {
-                 throw new Exception($"创建快捷方式文件失败: {ex.Message}");
+                 throw new Exception($"创建快捷方式文件失败: {ex.Message}", ex);
              }
          }
 
@@ -1154,6 +1051,13 @@ $Shortcut.Save()
                        支持的分隔符: x, X, *
                        尺寸范围: 宽度200-3840，高度150-2160
 
+  --icon <路径>        指定当前实例的 PNG/ICO 图标，不修改默认图标
+
+  --app-group <路径>   打开指定 JSON 文件中的全部 App，保留原有实例
+                       仅作为组启动器，不额外创建空白实例
+
+  --instance-hotkey <组合>  为组内实例指定独立显示/隐藏快捷键
+
   --help, -h           显示此帮助信息
 
 示例:
@@ -1173,7 +1077,12 @@ $Shortcut.Save()
   • 自动保存窗口位置和大小
   • 支持收藏夹功能
   • 支持暗色模式切换
-  • 支持窗口置顶功能";
+  • 支持窗口置顶功能（蓝色置顶，灰色未置顶）
+  • 极简模式下 Alt + 左键拖动移动窗口
+  • Ctrl + Shift + L：聚焦地址栏
+  • Ctrl + Shift + 点击链接：用默认浏览器打开
+  • Ctrl + Alt + Shift + T：切换设定透明度/完全不透明
+  • 设置 > App 组：保存全部实例、导入和切换多组 JSON 文件";
 
             MessageBox.Show(helpText, "TrayChrome 帮助", MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1295,6 +1204,7 @@ $Shortcut.Save()
                     var loadedSettings = JsonSerializer.Deserialize<AppSettings>(json);
                     if (loadedSettings != null)
                     {
+                        loadedSettings.NormalizeWindowSize();
                         appSettings = loadedSettings;
                     }
                 }
@@ -1341,6 +1251,7 @@ $Shortcut.Save()
         // 重新加载全局快捷键
         private void ReloadGlobalHotKey()
         {
+            if (instanceHotkey != null && hotKeyManager != null) return;
             try
             {
                 // 先注销现有的快捷键
@@ -1407,15 +1318,24 @@ $Shortcut.Save()
          // 初始化全局快捷键
         private void InitializeGlobalHotKey()
         {
-            if (appSettings.EnableGlobalHotKey && mainWindow != null)
+            if (hotKeyManager != null) return;
+            bool enabled = instanceHotkey != null
+                ? !string.IsNullOrWhiteSpace(instanceHotkey) : appSettings.EnableGlobalHotKey;
+            if (enabled && mainWindow != null)
             {
                 try
                 {
+                    uint modifiers = appSettings.HotKeyModifiers;
+                    uint key = appSettings.HotKeyVirtualKey;
+                    if (instanceHotkey != null)
+                        GlobalHotKeyManager.ParseHotkey(instanceHotkey, out modifiers, out key);
                     hotKeyManager = new GlobalHotKeyManager(mainWindow);
-                    hotKeyManager.RegisterHotKey(appSettings.HotKeyModifiers, appSettings.HotKeyVirtualKey, ToggleMainWindow);
+                    if (!hotKeyManager.RegisterHotKey(modifiers, key, ToggleMainWindow))
+                        throw new InvalidOperationException($"快捷键“{instanceHotkey ?? appSettings.Hotkey}”已被其他实例或程序占用，请更换。当前实例仍可通过托盘使用。");
                 }
                 catch (Exception ex)
                 {
+                    WriteDiagnostic("Register global hotkey failed", ex);
                     MessageBox.Show($"注册全局快捷键失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }

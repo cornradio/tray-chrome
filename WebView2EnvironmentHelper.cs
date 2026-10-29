@@ -7,7 +7,7 @@ namespace TrayChrome
 {
     public static class WebView2EnvironmentHelper
     {
-        public static async Task EnsureCoreWebView2WithFallbackAsync(WebView2 webView, AppSettings appSettings)
+        public static async Task EnsureCoreWebView2WithFallbackAsync(IWebView2 webView, AppSettings appSettings)
         {
             var options = new CoreWebView2EnvironmentOptions();
             var optionsType = typeof(CoreWebView2EnvironmentOptions);

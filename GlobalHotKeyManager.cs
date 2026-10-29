@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -39,15 +40,7 @@ namespace TrayChrome
             
             // 获取窗口句柄
             var helper = new WindowInteropHelper(_window);
-            var handle = helper.Handle;
-            
-            if (handle == IntPtr.Zero)
-            {
-                // 如果窗口还没有句柄，等待窗口加载完成
-                _window.SourceInitialized += (s, e) => RegisterHotKeyInternal(modifiers, virtualKey);
-                return true;
-            }
-            
+            helper.EnsureHandle();
             return RegisterHotKeyInternal(modifiers, virtualKey);
         }
 
@@ -60,7 +53,7 @@ namespace TrayChrome
                 return false;
 
             // 注册热键
-            bool success = RegisterHotKey(handle, _hotKeyId, modifiers, virtualKey);
+            bool success = RegisterHotKey(handle, _hotKeyId, modifiers | 0x4000, virtualKey);
             
             if (success)
             {
@@ -144,6 +137,43 @@ namespace TrayChrome
         public void Dispose()
         {
             UnregisterHotKey();
+        }
+
+        public static string ParseHotkey(string text, out uint modifiers, out uint virtualKey)
+        {
+            modifiers = 0;
+            virtualKey = 0;
+            var names = new List<string>();
+            string[] parts = text.Split('+');
+            if (parts.Length < 2) throw new ArgumentException("快捷键需要至少一个修饰键和一个按键，例如 Ctrl + Alt + 1。");
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                uint modifier;
+                switch (parts[i].Trim().ToLowerInvariant())
+                {
+                    case "ctrl": case "control": modifier = 2; break;
+                    case "alt": modifier = 1; break;
+                    case "shift": modifier = 4; break;
+                    case "win": case "windows": modifier = 8; break;
+                    default: throw new ArgumentException("修饰键仅支持 Ctrl、Alt、Shift、Win。");
+                }
+                if ((modifiers & modifier) != 0) throw new ArgumentException("快捷键不能重复使用同一修饰键。");
+                modifiers |= modifier;
+            }
+            string key = parts[parts.Length - 1].Trim().ToUpperInvariant();
+            if (key.Length == 1 && ((key[0] >= 'A' && key[0] <= 'Z') || (key[0] >= '0' && key[0] <= '9')))
+                virtualKey = key[0];
+            else if (key.StartsWith("F", StringComparison.Ordinal)
+                && int.TryParse(key.Substring(1), out int number) && number >= 1 && number <= 24)
+                virtualKey = (uint)(0x70 + number - 1);
+            else throw new ArgumentException("按键仅支持 A-Z、0-9 或 F1-F24。");
+            // 固定顺序，便于显示和检测重复组合。
+            if ((modifiers & 2) != 0) names.Add("Ctrl");
+            if ((modifiers & 1) != 0) names.Add("Alt");
+            if ((modifiers & 4) != 0) names.Add("Shift");
+            if ((modifiers & 8) != 0) names.Add("Win");
+            names.Add(key);
+            return string.Join(" + ", names);
         }
     }
 }

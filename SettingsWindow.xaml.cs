@@ -44,6 +44,7 @@ namespace TrayChrome
         public bool EnableGlobalHotKey { get; set; }
         public string Hotkey { get; set; } = string.Empty;
         public string SelectedIconType { get; set; } = "default";
+        private string customIconPath = string.Empty;
         public bool IsProxyEnabled { get; set; }
         public string ProxyServer { get; set; } = string.Empty;
         public bool AutoZoomOutOnStartup { get; set; }
@@ -60,6 +61,7 @@ namespace TrayChrome
             this.mainWindow = mainWindow;
             this.app = app;
             this.originalSettings = settings;
+            settings.NormalizeWindowSize();
             
             // 设置窗口所有者
             if (mainWindow != null)
@@ -89,7 +91,8 @@ namespace TrayChrome
                 ProxyServer = settings.ProxyServer,
                 AutoZoomOutOnStartup = settings.AutoZoomOutOnStartup,
                 EnableRoundedCorners = settings.EnableRoundedCorners,
-                CornerRadiusPx = settings.CornerRadiusPx
+                CornerRadiusPx = settings.CornerRadiusPx,
+                WindowOpacity = settings.WindowOpacity
             };
             
             // 加载当前设置到UI
@@ -104,6 +107,7 @@ namespace TrayChrome
             // 加载收藏夹
             LoadBookmarks();
             RefreshBookmarkList();
+            InitializeAppGroups();
         }
 
         private void LoadSettingsToUI()
@@ -130,6 +134,7 @@ namespace TrayChrome
 
         private void SetupDataBinding()
         {
+            OpacitySlider.Value = currentSettings.WindowOpacity * 100;
             // 窗口大小 - 使用事件处理
             WidthTextBox.Text = WindowWidth.ToString();
             HeightTextBox.Text = WindowHeight.ToString();
@@ -222,18 +227,20 @@ namespace TrayChrome
         {
             try
             {
-                string settingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon-settings.json");
-                if (File.Exists(settingsFile))
+                var settings = IconSettings.Load();
+                var activeApp = app ?? Application.Current as App;
+                if (activeApp != null && !string.Equals(activeApp.CurrentIconPath, settings.IconPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    string json = File.ReadAllText(settingsFile);
-                    var settings = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
-                    if (settings.TryGetProperty("IconType", out var iconTypeElement))
-                    {
-                        SelectedIconType = iconTypeElement.GetString() ?? "default";
-                    }
+                    settings.IconType = "custom";
+                    settings.IconPath = activeApp.CurrentIconPath;
                 }
+                SelectedIconType = settings.IconType;
+                if (SelectedIconType == "custom") customIconPath = settings.IconPath;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"加载图标设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             
             // 设置单选按钮状态
             switch (SelectedIconType)
@@ -253,6 +260,10 @@ namespace TrayChrome
                 case "weixin":
                     WeixinIconRadio.IsChecked = true;
                     break;
+                case "custom":
+                    CustomIconRadio.IsChecked = true;
+                    CustomIconButton.ToolTip = customIconPath;
+                    break;
                 default:
                     DefaultIconRadio.IsChecked = true;
                     break;
@@ -263,72 +274,19 @@ namespace TrayChrome
         {
             try
             {
-                var openFileDialog = new OpenFileDialog();
-                openFileDialog.Title = "选择图标文件";
-                openFileDialog.Filter = "图标文件 (*.ico)|*.ico|PNG图片 (*.png)|*.png|所有文件 (*.*)|*.*";
-                openFileDialog.FilterIndex = 1;
-                openFileDialog.CheckFileExists = true;
-                
-                if (openFileDialog.ShowDialog() == true && !string.IsNullOrEmpty(openFileDialog.FileName))
+                string targetPath = IconSettings.SelectAndImport(this);
+                if (targetPath != null)
                 {
-                    string selectedPath = openFileDialog.FileName;
-                    
-                    if (!File.Exists(selectedPath))
-                    {
-                        MessageBox.Show("选择的文件不存在！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-                    
-                    var fileInfo = new FileInfo(selectedPath);
-                    if (fileInfo.Length > 5 * 1024 * 1024)
-                    {
-                        MessageBox.Show("图标文件过大，请选择小于5MB的文件！", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-                    
-                    // 复制图标到应用程序目录
-                    string customIconsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "custom-icons");
-                    Directory.CreateDirectory(customIconsDir);
-                    
-                    string fileName = $"custom_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(selectedPath)}";
-                    string targetPath = Path.Combine(customIconsDir, fileName);
-                    
-                    File.Copy(selectedPath, targetPath, true);
-                    
                     SelectedIconType = "custom";
-                    SaveIconSetting("custom", targetPath);
-                    
-                    // 立即应用图标
-                    if (app != null)
-                    {
-                        app.SetApplicationIcon(targetPath);
-                    }
-                    
-                    MessageBox.Show("自定义图标设置成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                    customIconPath = targetPath;
+                    CustomIconRadio.IsChecked = true;
+                    CustomIconButton.ToolTip = targetPath;
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"选择自定义图标失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private void SaveIconSetting(string iconType, string iconPath)
-        {
-            try
-            {
-                string settingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon-settings.json");
-                var settings = new
-                {
-                    IconType = iconType,
-                    IconPath = iconPath,
-                    LastUpdated = DateTime.Now
-                };
-                
-                string json = System.Text.Json.JsonSerializer.Serialize(settings, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(settingsFile, json);
-            }
-            catch { }
         }
 
         private void LoadDefaultRulesButton_Click(object sender, RoutedEventArgs e)
@@ -362,24 +320,28 @@ namespace TrayChrome
         {
             try
             {
-                // 验证窗口大小
-                if (!double.TryParse(WidthTextBox.Text, out double width) || width < 200 || width > 3840)
+                if (CustomIconRadio.IsChecked == true) IconSettings.ValidatePath(customIconPath);
+                var defaults = new AppSettings();
+                if (!double.TryParse(WidthTextBox.Text, out double width)
+                    || !double.IsFinite(width) || width < 200 || width > 3840)
                 {
-                    MessageBox.Show("窗口宽度必须在 200-3840 之间！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    WidthTextBox.Focus();
-                    return false;
+                    width = defaults.WindowWidth;
+                    (Application.Current as App)?.WriteDiagnostic("Invalid settings width reset to default.");
                 }
 
-                if (!double.TryParse(HeightTextBox.Text, out double height) || height < 150 || height > 2160)
+                if (!double.TryParse(HeightTextBox.Text, out double height)
+                    || !double.IsFinite(height) || height < 150 || height > 2160)
                 {
-                    MessageBox.Show("窗口高度必须在 150-2160 之间！", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    HeightTextBox.Focus();
-                    return false;
+                    height = defaults.WindowHeight;
+                    (Application.Current as App)?.WriteDiagnostic("Invalid settings height reset to default.");
                 }
+                WidthTextBox.Text = width.ToString();
+                HeightTextBox.Text = height.ToString();
 
                 // 更新设置对象
                 currentSettings.WindowWidth = width;
                 currentSettings.WindowHeight = height;
+                currentSettings.WindowOpacity = OpacitySlider.Value / 100;
                 currentSettings.IsTopMost = IsTopMost;
                 currentSettings.IsSuperMinimalMode = IsSuperMinimalMode;
                 currentSettings.IsAnimationEnabled = IsAnimationEnabled;
@@ -441,11 +403,21 @@ namespace TrayChrome
                     iconType = "weixin";
                     iconPath = "pack://application:,,,/Resources/alternative-icons/weixin.ico";
                 }
+                else if (CustomIconRadio.IsChecked == true)
+                {
+                    iconType = "custom";
+                    iconPath = customIconPath;
+                }
 
                 if (app != null)
                 {
                     app.SetApplicationIcon(iconPath);
                     app.SaveIconSetting(iconType, iconPath);
+                }
+                else
+                {
+                    ((App)Application.Current).SetApplicationIcon(iconPath);
+                    new IconSettings { IconType = iconType, IconPath = iconPath }.Save();
                 }
 
                 // 保存设置到文件
@@ -518,6 +490,7 @@ namespace TrayChrome
             target.AutoZoomOutOnStartup = source.AutoZoomOutOnStartup;
             target.EnableRoundedCorners = source.EnableRoundedCorners;
             target.CornerRadiusPx = source.CornerRadiusPx;
+            target.WindowOpacity = source.WindowOpacity;
         }
 
         // 收藏夹管理方法
@@ -743,9 +716,7 @@ namespace TrayChrome
                 mainWindow.webView.CoreWebView2.Navigate(bookmark.Url);
                 if (!mainWindow.IsVisible)
                 {
-                    mainWindow.Show();
-                    mainWindow.WindowState = WindowState.Normal;
-                    mainWindow.Activate();
+                    mainWindow.ShowWithAnimation();
                 }
             }
         }
@@ -940,4 +911,3 @@ namespace TrayChrome
         }
     }
 }
-

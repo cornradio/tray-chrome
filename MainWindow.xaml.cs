@@ -39,13 +39,6 @@ namespace TrayChrome
         private const int HTBOTTOMLEFT = 16;
         private const int HTBOTTOMRIGHT = 17;
 
-        // 用于给 WebView2 原生窗口设置圆角区域（解决 WPF 裁剪对 HwndHost 无效的问题）
-        [DllImport("gdi32.dll")]
-        private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
-
-        [DllImport("user32.dll")]
-        private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
-
         private List<Bookmark> bookmarks = new List<Bookmark>();
         private string bookmarksFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bookmarks.json");
         private string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
@@ -61,6 +54,7 @@ namespace TrayChrome
         private bool isTopMost = true; // 默认置顶
         private bool isSuperMinimalMode = false; // 超级极简模式状态
         private bool isAnimationEnabled = true; // 动画启用状态
+        private bool opacityTemporarilyDisabled;
         private bool hasSavedPosition = false; // 是否存在保存的位置
         private double lastVisibleLeft = double.NaN; // 上次隐藏前的可见位置
         private double lastVisibleTop = double.NaN;
@@ -103,6 +97,7 @@ namespace TrayChrome
                 isSuperMinimalMode = true;
             }
             
+            if (!string.IsNullOrWhiteSpace(startupUrl)) AddressBar.Text = startupUrl;
             InitializeWebView(startupUrl);
             LoadBookmarks();
 
@@ -163,8 +158,22 @@ namespace TrayChrome
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.L)
+            Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift)
+                && key == Key.T)
             {
+                if (!e.IsRepeat)
+                {
+                    opacityTemporarilyDisabled = !opacityTemporarilyDisabled;
+                    ApplyWindowOpacity();
+                }
+                e.Handled = true;
+                return;
+            }
+
+            if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
+            {
+                if (isSuperMinimalMode) ToggleSuperMinimalMode(false);
                 AddressBar.Focus();
                 AddressBar.SelectAll();
                 e.Handled = true;
@@ -196,6 +205,23 @@ namespace TrayChrome
                 e.Handled = true;
                 return;
             }
+        }
+
+        private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (isSuperMinimalMode && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+            {
+                e.Handled = true;
+                BeginAnimation(TopProperty, null);
+                BeginAnimation(LeftProperty, null);
+                DragMove();
+                RememberVisiblePosition();
+            }
+        }
+
+        private void ApplyWindowOpacity()
+        {
+            Opacity = opacityTemporarilyDisabled ? 1.0 : appSettings.WindowOpacity;
         }
 
         private async void InitializeWebView(string? startupUrl = null)
@@ -269,6 +295,7 @@ namespace TrayChrome
             }
             catch (Exception ex)
             {
+                (Application.Current as App)?.WriteDiagnostic("WebView2 initialization failed", ex);
                 MessageBox.Show($"WebView2初始化失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -519,7 +546,25 @@ namespace TrayChrome
         {
             // 检查是否按住了Ctrl键
             bool isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
-            
+            bool isShiftPressed = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+            if (isCtrlPressed && isShiftPressed)
+            {
+                e.Handled = true;
+                try
+                {
+                    if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+                        || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                        throw new InvalidOperationException("仅支持在默认浏览器中打开 HTTP 或 HTTPS 链接。");
+                    Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"在默认浏览器中打开链接失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                return;
+            }
+
             if (isCtrlPressed)
             {
                 // 按住Ctrl键时，在新的WebView2窗口中打开链接
@@ -724,6 +769,7 @@ namespace TrayChrome
                          button.Style = newStyle;
                      }
                  }
+                 UpdateTopMostButtonAppearance();
              }
              catch (Exception ex)
              {
@@ -735,7 +781,9 @@ namespace TrayChrome
          {
              if (TopMostButton != null)
              {
-                 TopMostButton.Content = isTopMost ? "📌" : "⚲";
+                 TopMostButton.Foreground = isTopMost
+                     ? Brushes.DodgerBlue
+                     : new SolidColorBrush(isDarkMode ? Color.FromRgb(0xAA, 0xAA, 0xAA) : Color.FromRgb(0x66, 0x66, 0x66));
                  TopMostButton.ToolTip = isTopMost ? "取消置顶" : "窗口置顶";
              }
          }
@@ -756,51 +804,6 @@ namespace TrayChrome
                 ? new RectangleGeometry(new Rect(0, 0, MainContentGrid.ActualWidth, MainContentGrid.ActualHeight), radius, radius)
                 : null;
 
-            // WebView2 是原生窗口，无法被 WPF 裁剪，需单独设置原生圆角区域
-            ApplyWebViewRoundedCorners();
-        }
-
-        private void ApplyWebViewRoundedCorners()
-        {
-            if (webView == null) return;
-
-            IntPtr hWnd;
-            try { hWnd = webView.Handle; }
-            catch { return; }
-
-            if (hWnd == IntPtr.Zero) return;
-
-            // 仅在极简模式（无工具栏、WebView 撑满窗口）下需要对 WebView 做圆角
-            double radius = appSettings.EnableRoundedCorners ? appSettings.CornerRadiusPx : 0;
-            bool applyToWebView = isSuperMinimalMode && radius > 0;
-
-            if (!applyToWebView)
-            {
-                SetWindowRgn(hWnd, IntPtr.Zero, true);
-                return;
-            }
-
-            double dpiScaleX = 1.0;
-            double dpiScaleY = 1.0;
-            try
-            {
-                var dpi = VisualTreeHelper.GetDpi(webView);
-                dpiScaleX = dpi.DpiScaleX;
-                dpiScaleY = dpi.DpiScaleY;
-            }
-            catch { }
-
-            int width = (int)Math.Ceiling(webView.ActualWidth * dpiScaleX);
-            int height = (int)Math.Ceiling(webView.ActualHeight * dpiScaleY);
-            int r = (int)Math.Ceiling(radius * dpiScaleX);
-
-            if (width <= 0 || height <= 0 || r <= 0) return;
-
-            IntPtr region = CreateRoundRectRgn(0, 0, width + 1, height + 1, r * 2, r * 2);
-            if (region == IntPtr.Zero) return;
-
-            // SetWindowRgn 成功后系统拥有该 region，不能再 DeleteObject
-            SetWindowRgn(hWnd, region, true);
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
@@ -1093,6 +1096,11 @@ namespace TrayChrome
 
         public void ShowWithAnimation()
         {
+            (Application.Current as App)?.WriteDiagnostic("ShowWithAnimation started");
+            var normalSize = GetNormalWindowSize();
+            WindowState = WindowState.Normal;
+            Width = normalSize.Width;
+            Height = normalSize.Height;
             var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
 
             // 目标位置：优先恢复上次隐藏前的位置，其次使用当前 Left/Top，最后默认右下角
@@ -1158,6 +1166,7 @@ namespace TrayChrome
 
         public void HideWithAnimation()
         {
+            (Application.Current as App)?.WriteDiagnostic("HideWithAnimation started");
             // 先清除可能残留的动画，确保读取到正确的当前位置
             BeginAnimation(TopProperty, null);
             BeginAnimation(LeftProperty, null);
@@ -1196,7 +1205,7 @@ namespace TrayChrome
             lastVisibleTop = Top;
         }
 
-        public void ResetWindowPosition()
+        public void ResetWindowSizeAndPosition()
         {
             // 清除已记录的位置，恢复到默认右下角
             lastVisibleLeft = double.NaN;
@@ -1211,12 +1220,18 @@ namespace TrayChrome
             BeginAnimation(WidthProperty, null);
             BeginAnimation(HeightProperty, null);
 
+            WindowState = WindowState.Normal;
+            var defaults = new AppSettings();
+            Width = defaults.WindowWidth;
+            Height = defaults.WindowHeight;
+
             var workingArea = GetCurrentScreenWorkingAreaInWpfUnits();
             double targetLeft = workingArea.Right - Width - 20;
             double targetTop = workingArea.Bottom - Height - 20;
 
             Left = targetLeft;
             Top = targetTop;
+            RememberVisiblePosition();
 
             // 显示窗口，确保用户能找到
             Show();
@@ -1372,22 +1387,7 @@ namespace TrayChrome
         {
             try
             {
-                string args = "--open";
-                string currentUrl = webView?.CoreWebView2?.Source ?? "";
-                if (!string.IsNullOrEmpty(currentUrl))
-                {
-                    args += $" --url \"{currentUrl}\"";
-                }
-
-                // 启动新的应用程序实例
-                string currentExecutable = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
-                if (!string.IsNullOrEmpty(currentExecutable))
-                {
-                    System.Diagnostics.Process.Start(currentExecutable, args);
-                }
-                
-                // 关闭当前实例
-                Application.Current.Shutdown();
+                ((App)Application.Current).RestartCurrentInstance();
             }
             catch (Exception ex)
             {
@@ -1419,6 +1419,7 @@ namespace TrayChrome
                 }
                 
                 // 应用设置
+                appSettings.NormalizeWindowSize();
                 currentZoomFactor = appSettings.ZoomFactor;
                 isMobileUA = appSettings.IsMobileUA;
                 this.Width = appSettings.WindowWidth;
@@ -1427,6 +1428,7 @@ namespace TrayChrome
                 isTopMost = appSettings.IsTopMost;
                 isSuperMinimalMode = appSettings.IsSuperMinimalMode;
                 isAnimationEnabled = appSettings.IsAnimationEnabled;
+                ApplyWindowOpacity();
                 
                 // 应用UI外观（需要在WebView初始化后调用，所以延迟到InitializeWebView之后）
                 
@@ -1461,6 +1463,25 @@ namespace TrayChrome
             }
         }
 
+        public Size GetNormalWindowSize()
+        {
+            double width = appSettings.WindowWidth;
+            double height = appSettings.WindowHeight;
+            if (WindowState == WindowState.Normal)
+            {
+                width = Width;
+                height = Height;
+            }
+            else if (!RestoreBounds.IsEmpty && RestoreBounds.Width >= MinWidth && RestoreBounds.Height >= MinHeight)
+            {
+                width = RestoreBounds.Width;
+                height = RestoreBounds.Height;
+            }
+            var settings = new AppSettings { WindowWidth = width, WindowHeight = height };
+            settings.NormalizeWindowSize();
+            return new Size(settings.WindowWidth, settings.WindowHeight);
+        }
+
         private void SaveSettings()
         {
             try
@@ -1468,8 +1489,9 @@ namespace TrayChrome
                 // 更新设置
                 appSettings.ZoomFactor = currentZoomFactor;
                 appSettings.IsMobileUA = isMobileUA;
-                appSettings.WindowWidth = this.Width;
-                appSettings.WindowHeight = this.Height;
+                var normalSize = GetNormalWindowSize();
+                appSettings.WindowWidth = normalSize.Width;
+                appSettings.WindowHeight = normalSize.Height;
                 appSettings.IsDarkMode = isDarkMode;
                 appSettings.IsTopMost = isTopMost;
                 appSettings.IsSuperMinimalMode = isSuperMinimalMode;
@@ -1737,7 +1759,7 @@ namespace TrayChrome
                     this.Width = newWidth;
                 }
                 
-                if (newHeight >= 300)
+                if (newHeight >= MinHeight)
                 {
                     this.Height = newHeight;
                 }
@@ -1797,7 +1819,7 @@ namespace TrayChrome
                     this.Width = newWidth;
                 }
                 
-                if (newHeight >= 300)
+                if (newHeight >= MinHeight)
                 {
                     this.Height = newHeight;
                 }
@@ -1818,7 +1840,9 @@ namespace TrayChrome
         {
             if (msg == WM_NCHITTEST)
             {
-                var point = new Point(lParam.ToInt32() & 0xFFFF, lParam.ToInt32() >> 16);
+                long coordinates = lParam.ToInt64();
+                var point = new Point(unchecked((short)(coordinates & 0xFFFF)),
+                    unchecked((short)((coordinates >> 16) & 0xFFFF)));
                 point = PointFromScreen(point);
                 
                 const int resizeBorder = 5;
@@ -1908,8 +1932,7 @@ namespace TrayChrome
                 }
             }
 
-            // 切换极简模式后重新应用圆角（WebView 撑满/收起时需要更新原生圆角区域）
-            // 延迟到布局完成后执行，确保拿到 WebView 的最新尺寸
+            // 等待布局完成，以新的内容尺寸裁剪圆角。
             Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
 
             // 保存设置
@@ -2078,7 +2101,7 @@ namespace TrayChrome
                     await Task.Delay(1000);
                     
                     // 6. 创建新实例并放回原位
-                    webView = new Microsoft.Web.WebView2.Wpf.WebView2();
+                    webView = new Microsoft.Web.WebView2.Wpf.WebView2CompositionControl();
                     webView.Name = "webView";
                     Grid.SetRow(webView, 1);
                     parent.Children.Insert(index, webView);
@@ -2130,6 +2153,11 @@ namespace TrayChrome
         {
             try
             {
+                settings.NormalizeWindowSize();
+                Width = settings.WindowWidth;
+                Height = settings.WindowHeight;
+                appSettings.WindowWidth = settings.WindowWidth;
+                appSettings.WindowHeight = settings.WindowHeight;
                 // 应用缩放
                 if (settings.AutoZoomOutOnStartup)
                 {
@@ -2199,6 +2227,9 @@ namespace TrayChrome
                 appSettings.EnableRoundedCorners = settings.EnableRoundedCorners;
                 appSettings.CornerRadiusPx = settings.CornerRadiusPx;
                 ApplyRoundedCorners();
+                appSettings.WindowOpacity = settings.WindowOpacity;
+                opacityTemporarilyDisabled = false;
+                ApplyWindowOpacity();
 
                 // 保存设置
                 SaveSettings();
@@ -2360,6 +2391,20 @@ namespace TrayChrome
 
     public class AppSettings
     {
+        public void NormalizeWindowSize()
+        {
+            if (!double.IsFinite(WindowWidth) || WindowWidth < 200 || WindowWidth > 3840)
+            {
+                (Application.Current as App)?.WriteDiagnostic($"Invalid saved width {WindowWidth}; restoring 360.");
+                WindowWidth = 360;
+            }
+            if (!double.IsFinite(WindowHeight) || WindowHeight < 150 || WindowHeight > 2160)
+            {
+                (Application.Current as App)?.WriteDiagnostic($"Invalid saved height {WindowHeight}; restoring 640.");
+                WindowHeight = 640;
+            }
+        }
+
         public double ZoomFactor { get; set; } = 1.0;
         public bool IsMobileUA { get; set; } = true;
         public double WindowWidth { get; set; } = 360;
@@ -2370,6 +2415,17 @@ namespace TrayChrome
         public bool IsTopMost { get; set; } = true;
         public bool IsSuperMinimalMode { get; set; } = false;
         public bool IsAnimationEnabled { get; set; } = true;
+        private double windowOpacity = 1.0;
+        public double WindowOpacity
+        {
+            get => windowOpacity;
+            set
+            {
+                if (!double.IsFinite(value) || value < 0.3 || value > 1.0)
+                    throw new ArgumentOutOfRangeException(nameof(value), "透明度必须在 30%-100% 之间。");
+                windowOpacity = value;
+            }
+        }
         
         // 广告拦截设置
         public bool IsAdBlockEnabled { get; set; } = false;

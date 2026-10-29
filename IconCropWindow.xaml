@@ -1,0 +1,31 @@
+<Window x:Class="TrayChrome.IconCropWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="裁剪正方形图标" Width="460" SizeToContent="Height"
+        ResizeMode="NoResize" WindowStartupLocation="CenterScreen">
+    <StackPanel Margin="16">
+        <TextBlock Text="拖动选区调整位置，使用滑块调整正方形大小。" Margin="0,0,0,12"/>
+        <Border Background="#303030" Height="320">
+            <Canvas Name="CropCanvas" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="Transparent" ClipToBounds="True"
+                    MouseLeftButtonDown="CropCanvas_MouseLeftButtonDown"
+                    MouseMove="CropCanvas_MouseMove"
+                    MouseLeftButtonUp="CropCanvas_MouseLeftButtonUp">
+                <Image Name="SourceImage" IsHitTestVisible="False"/>
+                <Rectangle Name="SelectionRectangle" Stroke="White" StrokeThickness="2"
+                           Fill="#20000000" Cursor="SizeAll" IsHitTestVisible="False"/>
+            </Canvas>
+        </Border>
+        <TextBlock Text="选区大小" Margin="0,12,0,0"/>
+        <Slider Name="SizeSlider" Minimum="1" Maximum="100" Value="100"
+                ValueChanged="SizeSlider_ValueChanged" Margin="0,5"/>
+        <StackPanel Orientation="Horizontal" Margin="0,8">
+            <Image Name="PreviewImage" Width="48" Height="48" Stretch="Uniform"/>
+            <TextBlock Name="CropSizeText" Margin="12,0" VerticalAlignment="Center"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="确认裁剪" Click="Confirm_Click" IsDefault="True" Padding="12,6" Margin="4"/>
+            <Button Content="取消" IsCancel="True" Padding="12,6" Margin="4"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

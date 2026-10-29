@@ -5,6 +5,8 @@
         Title="Tray Chrome"
         Height="640"
         Width="360"
+        MinWidth="200"
+        MinHeight="150"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="False"
@@ -12,7 +14,8 @@
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
     
     <Window.Resources>
         <!-- 自定义按钮样式 -->
@@ -99,7 +102,7 @@
         </Border>
         
         <!-- WebView2 浏览器控件 -->
-        <wv2:WebView2 Grid.Row="1" Name="webView"/>
+        <wv2:WebView2CompositionControl Grid.Row="1" Name="webView"/>
         
         <!-- 底部功能按钮栏 -->
         <Border Grid.Row="2" Name="BottomToolbar" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">
@@ -183,9 +186,13 @@
                 </Button>
 
                 <!-- 置顶按钮 -->
-                <Button Grid.Column="8" Name="TopMostButton" Content="📌" 
+                <Button Grid.Column="8" Name="TopMostButton"
                         Style="{StaticResource ToolbarButtonStyle}" Click="TopMostButton_Click"
-                        ToolTip="取消置顶"/>
+                        ToolTip="取消置顶">
+                    <Path Width="13" Height="15" Stretch="Uniform"
+                          Fill="{Binding Foreground, ElementName=TopMostButton}"
+                          Data="M 4,0 L 10,0 L 9,6 L 12,9 L 12,10 L 7.7,10 L 7,15 L 6.3,10 L 2,10 L 2,9 L 5,6 Z"/>
+                </Button>
                         
                 <!-- 拖动按钮 -->
                 <Label Grid.Column="11" Name="DragButton" Content="" 

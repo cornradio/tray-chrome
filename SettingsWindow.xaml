@@ -63,7 +63,7 @@
                                 <TextBox Grid.Row="0" Grid.Column="3" Name="HeightTextBox"/>
                                 
                                 <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" 
-                                       Content="提示：修改后需要重启窗口才能生效" 
+                                       Content="提示：应用后立即生效；无效尺寸恢复默认 360x640"
                                        Foreground="Gray" FontSize="10"/>
                             </Grid>
                         </GroupBox>
@@ -86,6 +86,16 @@
                         <GroupBox Header="主题">
                             <StackPanel>
                                 <CheckBox Name="DarkModeCheckBox" Content="暗色模式"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="窗口透明度">
+                            <StackPanel>
+                                <Slider Name="OpacitySlider" Minimum="30" Maximum="100"
+                                        TickFrequency="5" IsSnapToTickEnabled="True" Margin="5"/>
+                                <TextBlock Margin="5" Text="{Binding Value, ElementName=OpacitySlider, StringFormat=透明度：{0:F0}%}"/>
+                                <TextBlock Margin="5" TextWrapping="Wrap" Foreground="Gray"
+                                           Text="Ctrl + Alt + Shift + T：在设定透明度与完全不透明之间切换（仅当前窗口）。"/>
                             </StackPanel>
                         </GroupBox>
 
@@ -125,7 +135,8 @@
                                 <RadioButton Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Name="FeishuIconRadio" Content="飞书" Tag="feishu" Margin="5"/>
                                 <RadioButton Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Name="WecomIconRadio" Content="企业微信" Tag="wecom" Margin="5"/>
                                 <RadioButton Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Name="WeixinIconRadio" Content="微信" Tag="weixin" Margin="5"/>
-                                <Button Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Name="CustomIconButton" Content="选择自定义图标..." Margin="5" Click="CustomIconButton_Click"/>
+                                <RadioButton Grid.Row="5" Grid.Column="0" Name="CustomIconRadio" Content="自定义" Tag="custom" Margin="5"/>
+                                <Button Grid.Row="5" Grid.Column="1" Name="CustomIconButton" Content="选择自定义图标..." Margin="5" Click="CustomIconButton_Click"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -246,7 +257,7 @@
                                     <Run Text="• Ctrl + 中键(托盘图标)：" FontWeight="Bold"/>
                                     <Run Text="关闭当前实例"/>
                                     <LineBreak/>
-                                    <Run Text="• Ctrl + L：" FontWeight="Bold"/>
+                                    <Run Text="• Ctrl + Shift + L：" FontWeight="Bold"/>
                                     <Run Text="聚焦到地址栏"/>
                                     <LineBreak/>
                                     <Run Text="• Ctrl + R：" FontWeight="Bold"/>
@@ -260,6 +271,15 @@
                                     <LineBreak/>
                                     <Run Text="• Ctrl + 点击链接：" FontWeight="Bold"/>
                                     <Run Text="在新窗口中打开链接"/>
+                                    <LineBreak/>
+                                    <Run Text="• Ctrl + Shift + 点击链接：" FontWeight="Bold"/>
+                                    <Run Text="用系统默认浏览器打开链接"/>
+                                    <LineBreak/>
+                                    <Run Text="• Alt + 左键拖动：" FontWeight="Bold"/>
+                                    <Run Text="极简模式下移动窗口，不点击网页"/>
+                                    <LineBreak/>
+                                    <Run Text="• Ctrl + Alt + Shift + T：" FontWeight="Bold"/>
+                                    <Run Text="切换设定透明度与完全不透明"/>
                                 </TextBlock>
                             </StackPanel>
                         </GroupBox>
@@ -303,6 +323,90 @@
                     
                     <!-- 状态栏 -->
                     <TextBlock Grid.Row="2" Name="BookmarkStatusText" Margin="0,5,0,0" Foreground="Gray" FontSize="10"/>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="App 组" Name="AppGroupsTab">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Name="AppGroupFileActions">
+                            <Button Content="移除配置" Click="RemoveAppGroup_Click"
+                                    ToolTip="直接删除所选 JSON 配置文件，不再确认"/>
+                            <Button Content="在资源管理器中打开" Click="OpenAppGroupFolder_Click"/>
+                        </StackPanel>
+                    <ComboBox Name="AppGroupFilesComboBox" Margin="5" SelectedValuePath="FilePath"
+                              SelectionChanged="AppGroupFilesComboBox_SelectionChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding FileName}" ToolTip="{Binding FilePath}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    </DockPanel>
+                    <WrapPanel Name="AppGroupLoadActions">
+                        <Button Content="加载组" Click="LoadAppGroup_Click" Background="#218838"
+                                ToolTip="组内实例仅启动到托盘，不弹出窗口"
+                                Foreground="White" FontWeight="SemiBold" MinWidth="110"/>
+                        <Button Content="加载组 &amp; 关闭当前实例" Click="LoadAppGroupAndClose_Click"
+                                Background="#218838" Foreground="White" FontWeight="SemiBold"
+                                ToolTip="组内实例启动到托盘，成功后仅退出当前实例"/>
+                    </WrapPanel>
+                    </StackPanel>
+                    <WrapPanel Grid.Row="1" Name="AppGroupActions">
+                        <Button Content="导入组文件..." Click="ImportAppGroup_Click"/>
+                        <Button Content="把当前窗口保存成 App 组" Click="SaveAppGroup_Click"
+                                ToolTip="覆盖所选配置，仅保留当前窗口"/>
+                        <Button Content="当前配置另存为..." Click="SaveAppGroupAs_Click"/>
+                        <Button Content="创建桌面快捷方式" Click="CreateAppGroupShortcut_Click"
+                                ToolTip="创建所选组的桌面快捷方式；打开时保留原有实例"/>
+                    </WrapPanel>
+                    <DataGrid Grid.Row="2" Name="AppGroupGrid" Margin="5"
+                              IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False"
+                              CanUserDeleteRows="False" SelectionMode="Single" HeadersVisibility="Column"
+                              RowHeight="32" MinRowHeight="32">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="图标" Width="64">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Click="ChangeAppGroupIcon_Click" ToolTip="点击更换图标"
+                                                MinWidth="0" Padding="2" Margin="1"
+                                                AutomationProperties.Name="更换 App 图标">
+                                            <Image Source="{Binding Logo}" Width="22" Height="22" Stretch="Uniform"/>
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="*"/>
+                            <DataGridTextColumn Header="快捷键" Binding="{Binding Hotkey}" Width="120"/>
+                            <DataGridTemplateColumn Header="操作" Width="182">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="启动" Click="StartAppGroupItem_Click"
+                                                    ToolTip="仅启动此 App 到托盘，保留其他实例"
+                                                    MinWidth="55" Margin="1" Padding="6,1"/>
+                                            <Button Content="编辑" Click="EditAppGroupItem_Click"
+                                                    MinWidth="55" Margin="1" Padding="6,1"/>
+                                            <Button Content="删除" Click="DeleteAppGroupItem_Click"
+                                                    MinWidth="55" Margin="1" Padding="6,1"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <StackPanel Grid.Row="3" Margin="5">
+                        <TextBlock Name="AppGroupStatusText" TextWrapping="Wrap"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="Gray" Margin="0,5,0,0"
+                                   Text="点击图标更换 Logo，裁剪功能暂时停用。编辑可修改 URL、图标和快捷键。删除不再确认；移除配置会删除 JSON。保存当前窗口覆盖配置，另存为复制配置。加载组仅启动到托盘；加载并关闭仅退出当前实例。"/>
+                    </StackPanel>
                 </Grid>
             </TabItem>
 
@@ -357,6 +461,8 @@
                                     <Run Text="--clean        启用极简模式（隐藏工具栏）"/><LineBreak/>
                                     <Run Text="--unclean      强制禁用极简模式"/><LineBreak/>
                                     <Run Text="--size &lt;宽x高&gt;  指定窗口大小，如 480x320"/><LineBreak/>
+                                    <Run Text="--icon &lt;路径&gt;   指定当前实例的 PNG/ICO 图标"/><LineBreak/>
+                                    <Run Text="--app-group &lt;路径&gt;   打开指定 App 组，保留原有实例"/><LineBreak/>
                                     <Run Text="--help, -h     显示帮助信息"/>
                                 </TextBlock>
                             </StackPanel>
@@ -365,7 +471,7 @@
                         <GroupBox Header="工具推荐">
                             <StackPanel Margin="5">
                                 <TextBlock TextWrapping="Wrap" Margin="5">
-                                    在极简模式（Ctrl+Shift+B）下窗口无法拖拽，推荐使用 AltSnap 工具来移动和调整窗口大小。
+                                    极简模式（Ctrl+Shift+B）下，按住 Alt 并用鼠标左键拖动网页即可移动窗口，不会点击网页。AltSnap 可用于更多窗口管理操作。
                                 </TextBlock>
                                 <Button Name="AltSnapButton" Content="AltSnap (GitHub)" Click="AltSnapButton_Click" HorizontalAlignment="Left" Margin="5"/>
                             </StackPanel>
@@ -385,4 +491,3 @@
         </Border>
     </Grid>
 </Window>
-

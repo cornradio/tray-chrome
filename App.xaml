@@ -15,14 +15,18 @@
                     <MenuItem Header="广告拦截" Name="AdBlockMenuItem" Click="AdBlock_Click" IsCheckable="True" />
                     <Separator />
                     <MenuItem Header="设置 (_S)" Click="OpenSettings_Click" />
-                    <MenuItem Header="重置窗口位置 (_P)" Click="ResetWindowPosition_Click" />
+                    <MenuItem Header="自定义图标..." Click="SetCustomIcon_Click" />
+                    <MenuItem Header="加载 App 组" SubmenuOpened="AppGroups_SubmenuOpened">
+                        <MenuItem Header="正在读取..."/>
+                    </MenuItem>
+                    <MenuItem Header="恢复默认大小和位置 (_P)" Click="ResetWindowSizeAndPosition_Click" />
                     <Separator />
                     <MenuItem Header="创建桌面快捷方式 (_C)" Click="CreateDesktopShortcut_Click" />
                     <Separator />
-                    <MenuItem Header="增加实例 (_N)" Click="AddInstance_Click" />
-                    <MenuItem Header="重启实例 (_R)" Click="RestartInstance_Click" />
-                    <Separator />
-                    <MenuItem Header="关闭实例 (_Q)" Click="CloseInstance_Click" />
+                    <MenuItem Header="增加实例 (_N)" Click="AddInstance_Click"/>
+                    <MenuItem Header="重启实例 (_R)" Click="RestartInstance_Click"/>
+                    <Separator/>
+                    <MenuItem Header="关闭实例 (_Q)" Click="CloseInstance_Click"/>
                 </ContextMenu>
             </tb:TaskbarIcon.ContextMenu>
         </tb:TaskbarIcon>
