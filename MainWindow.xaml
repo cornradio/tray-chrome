@@ -15,6 +15,7 @@
         AllowsTransparency="True"
         Background="Transparent"
         PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewKeyUp="Window_PreviewKeyUp"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
     
     <Window.Resources>
@@ -183,6 +184,8 @@
                          Margin="0,3,5,3" Padding="8,5" 
                          Text="https://tva.cornradio.org/?name=search"
                          KeyDown="AddressBar_KeyDown"
+                         TextChanged="AddressBar_TextChanged"
+                         LostKeyboardFocus="AddressBar_LostKeyboardFocus"
                          FontSize="10"
                          FontWeight="Normal"
                          VerticalContentAlignment="Center"/>

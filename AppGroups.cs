@@ -18,6 +18,8 @@ namespace TrayChrome
         public string IconPath { get; set; } = IconSettings.DefaultPath;
         public double Width { get; set; } = 360;
         public double Height { get; set; } = 640;
+        public double? Left { get; set; }
+        public double? Top { get; set; }
         public bool IsSuperMinimalMode { get; set; }
         public string Hotkey { get; set; } = string.Empty;
         public List<string> Tabs { get; set; } = new();
@@ -164,6 +166,12 @@ namespace TrayChrome
                 sizeSettings.NormalizeWindowSize();
                 entry.Width = sizeSettings.WindowWidth;
                 entry.Height = sizeSettings.WindowHeight;
+                if (entry.Left.HasValue != entry.Top.HasValue
+                    || (entry.Left.HasValue && (!double.IsFinite(entry.Left.Value) || !double.IsFinite(entry.Top!.Value))))
+                {
+                    entry.Left = null;
+                    entry.Top = null;
+                }
                 if (string.IsNullOrWhiteSpace(entry.IconPath)) entry.IconPath = IconSettings.DefaultPath;
                 if (!entry.IconPath.StartsWith("pack://", StringComparison.Ordinal))
                 {
@@ -204,10 +212,25 @@ namespace TrayChrome
         public static async Task<AppGroup> CaptureAsync(string name)
         {
             var group = new AppGroup { Name = name };
+            var hotkeys = new HashSet<ulong>();
             foreach (int id in await GetInstanceIdsAsync())
             {
                 var response = await InstanceService.RequestAsync(id, "snapshot");
-                group.Apps.Add(response.Entry ?? throw new InvalidDataException($"实例 {id} 未返回窗口数据。"));
+                var entry = response.Entry ?? throw new InvalidDataException($"实例 {id} 未返回窗口数据。");
+                // 多个实例共用同一快捷键时只保留第一个，其余保存为空快捷键，避免整组保存失败。
+                if (!string.IsNullOrWhiteSpace(entry.Hotkey))
+                {
+                    try
+                    {
+                        GlobalHotKeyManager.ParseHotkey(entry.Hotkey, out uint modifiers, out uint key);
+                        if (!hotkeys.Add(((ulong)modifiers << 32) | key)) entry.Hotkey = string.Empty;
+                    }
+                    catch (ArgumentException)
+                    {
+                        entry.Hotkey = string.Empty;
+                    }
+                }
+                group.Apps.Add(entry);
             }
             return group;
         }
@@ -231,6 +254,11 @@ namespace TrayChrome
             start.ArgumentList.Add(entry.IsSuperMinimalMode ? "--clean" : "--unclean");
             start.ArgumentList.Add("--size");
             start.ArgumentList.Add(string.Create(CultureInfo.InvariantCulture, $"{entry.Width}x{entry.Height}"));
+            if (entry.Left.HasValue && entry.Top.HasValue)
+            {
+                start.ArgumentList.Add("--position");
+                start.ArgumentList.Add(string.Create(CultureInfo.InvariantCulture, $"{entry.Left.Value},{entry.Top.Value}"));
+            }
             return Process.Start(start) ?? throw new InvalidOperationException($"启动 App 失败：{entry.Url}");
         }
 

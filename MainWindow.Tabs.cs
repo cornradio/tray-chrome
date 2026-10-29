@@ -28,6 +28,8 @@ namespace TrayChrome
         private readonly List<BrowserTab> tabs = new();
         private BrowserTab activeTab;
         private bool tabInitializing;
+        private BrowserTab tabDragCandidate;
+        private Point tabDragStart;
         public int ActiveTabIndex => tabs.IndexOf(activeTab);
         private bool startupTabsRestoring = true;
         private bool tabsReady;
@@ -52,8 +54,16 @@ namespace TrayChrome
                 Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
             var tab = new BrowserTab { View = view, Url = url };
             tab.Header = new Button { Content = "新标签页", MaxWidth = 160,
-                Style = (Style)FindResource("TabHeaderStyle") };
+                Style = (Style)FindResource("TabHeaderStyle"), AllowDrop = true, Tag = tab };
             tab.Header.Click += (_, _) => SelectTab(tab);
+            tab.Header.PreviewMouseLeftButtonDown += (_, args) =>
+            {
+                tabDragCandidate = tab;
+                tabDragStart = args.GetPosition(tab.Header);
+            };
+            tab.Header.MouseMove += TabHeader_MouseMove;
+            tab.Header.DragOver += TabHeader_DragOver;
+            tab.Header.Drop += TabHeader_Drop;
             tab.Header.PreviewMouseDown += (_, args) =>
             {
                 if (args.ChangedButton != MouseButton.Middle) return;
@@ -67,7 +77,9 @@ namespace TrayChrome
                 item.Click += (_, _) => action();
                 menu.Items.Add(item);
             }
+
             AddAction("关闭标签页", () => CloseTab(tab));
+            AddAction("用新窗口打开", () => OpenTabInNewWindow(tab));
             AddAction("关闭其他标签页", () =>
             {
                 foreach (var other in tabs.Where(item => item != tab).ToArray()) CloseTab(other);
@@ -87,6 +99,55 @@ namespace TrayChrome
             tabs.Add(tab);
             UpdateTabBarVisibility();
             SelectTab(tab);
+        }
+
+        private void TabHeader_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (sender is not Button header || tabDragCandidate == null
+                || header != tabDragCandidate.Header || e.LeftButton != MouseButtonState.Pressed)
+                return;
+            var delta = e.GetPosition(header) - tabDragStart;
+            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+            var dragging = tabDragCandidate;
+            tabDragCandidate = null;
+            DragDrop.DoDragDrop(header, dragging, DragDropEffects.Move);
+        }
+
+        private void TabHeader_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = sender is Button target
+                && e.Data.GetData(typeof(BrowserTab)) is BrowserTab source
+                && source != target.Tag
+                && tabs.Contains(source)
+                && tabs.Contains(target.Tag as BrowserTab)
+                    ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void TabHeader_Drop(object sender, DragEventArgs e)
+        {
+            e.Handled = true;
+            if (sender is not Button target
+                || e.Data.GetData(typeof(BrowserTab)) is not BrowserTab source
+                || target.Tag is not BrowserTab destination
+                || source == destination)
+                return;
+
+            int sourceIndex = tabs.IndexOf(source);
+            int targetIndex = tabs.IndexOf(destination);
+            if (sourceIndex < 0 || targetIndex < 0) return;
+            int insertionIndex = targetIndex + (e.GetPosition(target).X >= target.ActualWidth / 2 ? 1 : 0);
+            if (sourceIndex < insertionIndex) insertionIndex--;
+            tabs.RemoveAt(sourceIndex);
+            tabs.Insert(Math.Clamp(insertionIndex, 0, tabs.Count), source);
+
+            var panels = tabs.Select(tab => TabHeaders.Children
+                .OfType<StackPanel>().Single(panel => panel.Tag == tab)).ToArray();
+            TabHeaders.Children.Clear();
+            foreach (var panel in panels) TabHeaders.Children.Add(panel);
+            UpdateTabTheme(isDarkMode);
         }
 
         private void UpdateTabBarVisibility()
@@ -118,7 +179,8 @@ namespace TrayChrome
             isNavigatingFromHistory = false;
             webView.Visibility = Visibility.Visible;
             Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
-            AddressBar.Text = webView.CoreWebView2?.Source ?? tab.Url;
+            addressBarEdited = false;
+            SetAddressBarText(webView.CoreWebView2?.Source ?? tab.Url);
             BackButton.IsEnabled = webView.CoreWebView2?.CanGoBack == true;
             ForwardButton.IsEnabled = webView.CoreWebView2?.CanGoForward == true;
             UpdateTabTheme(isDarkMode);
@@ -145,7 +207,7 @@ namespace TrayChrome
             }
         }
 
-        public async Task OpenTabAsync(string url = "https://tva.cornradio.org/?name=search")
+        public async Task OpenTabAsync(string url = "https://tva.cornradio.org/?name=search", bool focusAddressBar = false)
         {
             if (tabInitializing)
             {
@@ -155,12 +217,42 @@ namespace TrayChrome
             var view = new WebView2();
             BrowserHost.Children.Add(view);
             RegisterTab(view, url);
+            var tab = tabs.Last();
             TabsReady = false;
             try { await InitializeWebViewInternal(url); }
-            finally { TabsReady = tabs.All(tab => tab.View.CoreWebView2 != null); }
+            finally { TabsReady = tabs.All(item => item.View.CoreWebView2 != null); }
+            if (focusAddressBar && tab == activeTab)
+            {
+                addressBarEdited = false;
+                FocusAddressBar();
+                // WebView2 创建原生窗口后可能抢走焦点，输入阶段再聚焦一次。
+                _ = Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (tab == activeTab && !addressBarEdited) FocusAddressBar();
+                }), System.Windows.Threading.DispatcherPriority.Input);
+            }
         }
 
-        private async void NewTab_Click(object sender, RoutedEventArgs e) => await OpenTabAsync();
+        private async void NewTab_Click(object sender, RoutedEventArgs e) => await OpenTabAsync(focusAddressBar: true);
+
+        private void FocusAddressBar()
+        {
+            if (isSuperMinimalMode) ToggleSuperMinimalMode(false);
+            AddressBar.Focus();
+            Keyboard.Focus(AddressBar);
+            AddressBar.SelectAll();
+        }
+
+        private void OpenTabInNewWindow(BrowserTab tab)
+        {
+            string url = tab.View.CoreWebView2?.Source ?? tab.Url;
+            try { (Application.Current as App)?.OpenUrlInNewInstance(url); }
+            catch (Exception ex)
+            {
+                (Application.Current as App)?.WriteDiagnostic("Open tab in new window failed", ex);
+                MessageBox.Show($"用新窗口打开失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
 
         private async void CloseTab(BrowserTab tab)
         {

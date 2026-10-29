@@ -1,0 +1,84 @@
+<Window x:Class="TrayChrome.AppGroupManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="App 组管理" Width="760" Height="520" MinWidth="560" MinHeight="320"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="10,5"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <DockPanel Grid.Row="0" Name="AppGroupFileBar">
+            <Button DockPanel.Dock="Right" Content="加载组" Click="LoadAppGroup_Click"
+                    ToolTip="释放当前实例快捷键后启动组内实例到托盘，成功后关闭当前实例"
+                    Background="#218838" Foreground="White" FontWeight="SemiBold" MinWidth="90"/>
+            <ComboBox Name="AppGroupFilesComboBox" Margin="5" VerticalContentAlignment="Center"
+                      SelectionChanged="AppGroupFilesComboBox_SelectionChanged">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding FileName}" ToolTip="{Binding FilePath}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </DockPanel>
+        <WrapPanel Grid.Row="1" Name="AppGroupActions">
+            <Button Content="添加 App" Click="AddAppGroupItem_Click"/>
+            <Button Content="把所有已开 App 保存成组" Click="SaveAppGroup_Click"
+                    ToolTip="用同一程序的所有运行实例覆盖所选配置，包括隐藏到托盘的实例"/>
+            <Menu Background="Transparent" VerticalAlignment="Center" Margin="5">
+                <MenuItem Header="更多" Padding="10,5">
+                    <MenuItem Header="导入组文件..." Click="ImportAppGroup_Click"/>
+                    <MenuItem Header="当前配置另存为..." Click="SaveAppGroupAs_Click"/>
+                    <MenuItem Header="创建桌面快捷方式" Click="CreateAppGroupShortcut_Click"
+                              ToolTip="创建所选组的桌面快捷方式；打开时保留原有实例"/>
+                    <MenuItem Header="在资源管理器中打开" Click="OpenAppGroupFolder_Click"/>
+                    <Separator/>
+                    <MenuItem Header="移除配置" Click="RemoveAppGroup_Click"
+                              ToolTip="直接删除所选 JSON 配置文件，不再确认"/>
+                </MenuItem>
+            </Menu>
+        </WrapPanel>
+        <DataGrid Grid.Row="2" Name="AppGroupGrid" Margin="5"
+                  IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False"
+                  CanUserDeleteRows="False" SelectionMode="Single" HeadersVisibility="Column"
+                  RowHeight="32" MinRowHeight="32"
+                  MouseDoubleClick="AppGroupGrid_MouseDoubleClick"
+                  PreviewMouseRightButtonDown="AppGroupGrid_PreviewMouseRightButtonDown"
+                  ContextMenuOpening="AppGroupGrid_ContextMenuOpening"
+                  PreviewKeyDown="AppGroupGrid_PreviewKeyDown">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="ToolTip" Value="{Binding UrlList}"/>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="启动" Name="StartAppMenuItem" Click="StartAppGroupItem_Click"/>
+                    <MenuItem Header="编辑..." Name="EditAppMenuItem" Click="EditAppGroupItem_Click"/>
+                    <MenuItem Header="更换图标..." Name="IconAppMenuItem" Click="ChangeAppGroupIcon_Click"/>
+                    <MenuItem Header="删除" Name="DeleteAppMenuItem" InputGestureText="Del" Click="DeleteAppGroupItem_Click"/>
+                    <Separator/>
+                    <MenuItem Header="添加 App..." Click="AddAppGroupItem_Click"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="图标" Width="48">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Image Source="{Binding Logo}" Width="22" Height="22" Stretch="Uniform"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="网页" Binding="{Binding Urls}" Width="*"/>
+                <DataGridTextColumn Header="快捷键" Binding="{Binding Hotkey}" Width="120"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Window>

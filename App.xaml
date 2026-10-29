@@ -17,6 +17,7 @@
                     <MenuItem Header="设置 (_S)" Click="OpenSettings_Click" />
                     <MenuItem Header="书签管理器" Click="EditBookmarkFromTray_Click" />
                     <MenuItem Header="自定义图标..." Click="SetCustomIcon_Click" />
+                    <MenuItem Header="App 组管理 (_G)" Click="OpenAppGroupManager_Click" />
                     <MenuItem Header="加载 App 组" SubmenuOpened="AppGroups_SubmenuOpened">
                         <MenuItem Header="正在读取..."/>
                     </MenuItem>

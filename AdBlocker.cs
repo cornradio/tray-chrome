@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -188,75 +188,92 @@ namespace TrayChrome
             return false;
         }
 
+        private static readonly Dictionary<string, Regex> ruleRegexCache = new Dictionary<string, Regex>();
+
         private bool MatchesRule(string uri, string host, string path, string rule)
         {
             if (string.IsNullOrWhiteSpace(rule)) return false;
 
-            rule = rule.Trim();
-
-            // 支持简单的通配符匹配
-            // 将 AdBlock 规则转换为正则表达式
-            string pattern = rule
-                .Replace(".", "\\.")
-                .Replace("*", ".*")
-                .Replace("^", ".*")
-                .Replace("|", ".*");
-
-            // 检查域名匹配
-            if (rule.StartsWith("||"))
-            {
-                // ||example.com 匹配 example.com 及其子域名
-                string domain = rule.Substring(2).Split('/')[0].Split('^')[0].Split('|')[0];
-                if (host == domain || host.EndsWith("." + domain))
-                {
-                    return true;
-                }
-            }
-            // 检查完整 URL 匹配
-            else if (rule.StartsWith("|"))
-            {
-                // |https://example.com 精确匹配
-                string urlPattern = rule.Substring(1);
-                if (uri.StartsWith(urlPattern, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            // 检查路径匹配
-            else if (rule.StartsWith("/") && rule.EndsWith("/"))
-            {
-                // /regex/ 正则表达式匹配
-                try
-                {
-                    string regexPattern = rule.Substring(1, rule.Length - 2);
-                    if (Regex.IsMatch(uri, regexPattern, RegexOptions.IgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-                catch
-                {
-                    // 无效的正则表达式
-                }
-            }
-            // 简单字符串匹配
-            else
-            {
-                // 检查域名
-                if (host.Contains(rule, StringComparison.OrdinalIgnoreCase) || host.Equals(rule, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-                // 检查完整 URL
-                if (uri.Contains(rule, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            Regex regex = GetRuleRegex(rule.Trim());
+            return regex != null && regex.IsMatch(uri);
         }
 
+        internal static Regex GetRuleRegex(string rule)
+        {
+            lock (ruleRegexCache)
+            {
+                if (!ruleRegexCache.TryGetValue(rule, out Regex regex))
+                {
+                    regex = BuildRuleRegex(rule);
+                    ruleRegexCache[rule] = regex;
+                }
+                return regex;
+            }
+        }
+
+        // AdBlock 语法：||域名、|开头/结尾锚点、* 通配符、^ 分隔符；/.../ 只有包含正则元字符时才视为正则
+        private static Regex BuildRuleRegex(string rule)
+        {
+            int optionsIndex = rule.IndexOf('$');
+            if (optionsIndex > 0 && !IsRegexRule(rule))
+            {
+                rule = rule.Substring(0, optionsIndex);
+            }
+            if (rule.Length == 0) return null;
+
+            try
+            {
+                if (IsRegexRule(rule))
+                {
+                    return new Regex(rule.Substring(1, rule.Length - 2), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                }
+
+                var pattern = new System.Text.StringBuilder();
+                int index = 0;
+                if (rule.StartsWith("||"))
+                {
+                    pattern.Append(@"^[a-z][a-z0-9+.-]*://([^/?#]*\.)?");
+                    index = 2;
+                }
+                else if (rule.StartsWith("|"))
+                {
+                    pattern.Append('^');
+                    index = 1;
+                }
+
+                bool anchorEnd = rule.Length > index && rule.EndsWith("|");
+                int endIndex = anchorEnd ? rule.Length - 1 : rule.Length;
+                for (int i = index; i < endIndex; i++)
+                {
+                    char ch = rule[i];
+                    switch (ch)
+                    {
+                        case '*':
+                            pattern.Append(".*");
+                            break;
+                        case '^':
+                            pattern.Append(@"(?:[^\w.%-]|$)");
+                            break;
+                        default:
+                            pattern.Append(Regex.Escape(ch.ToString()));
+                            break;
+                    }
+                }
+                if (anchorEnd) pattern.Append('$');
+
+                return new Regex(pattern.ToString(), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool IsRegexRule(string rule)
+        {
+            return rule.Length > 2 && rule.StartsWith("/") && rule.EndsWith("/")
+                && rule.Substring(1, rule.Length - 2).IndexOfAny(@"\^$*+?()[]{}|.".ToCharArray()) >= 0;
+        }
         public void LoadDefaultRules()
         {
             // 加载一些常见的广告域名规则
@@ -276,9 +293,7 @@ namespace TrayChrome
                 "/ads/",
                 "/advertisement",
                 "/banner",
-                "/popup",
-                "||ad.*\\.com^",
-                "||ads.*\\.com^"
+                "/popup"
             };
         }
     }

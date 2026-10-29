@@ -285,88 +285,12 @@
             </TabItem>
 
             <TabItem Header="App 组" Name="AppGroupsTab">
-                <Grid Margin="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0">
-                    <DockPanel>
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Name="AppGroupFileActions">
-                            <Button Content="移除配置" Click="RemoveAppGroup_Click"
-                                    ToolTip="直接删除所选 JSON 配置文件，不再确认"/>
-                            <Button Content="在资源管理器中打开" Click="OpenAppGroupFolder_Click"/>
-                        </StackPanel>
-                    <ComboBox Name="AppGroupFilesComboBox" Margin="5" SelectedValuePath="FilePath"
-                              SelectionChanged="AppGroupFilesComboBox_SelectionChanged">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding FileName}" ToolTip="{Binding FilePath}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    </DockPanel>
-                    <WrapPanel Name="AppGroupLoadActions">
-                        <Button Content="加载组" Click="LoadAppGroup_Click" Background="#218838"
-                                ToolTip="组内实例仅启动到托盘，不弹出窗口"
-                                Foreground="White" FontWeight="SemiBold" MinWidth="110"/>
-                        <Button Content="加载组 &amp; 关闭当前实例" Click="LoadAppGroupAndClose_Click"
-                                Background="#218838" Foreground="White" FontWeight="SemiBold"
-                                ToolTip="组内实例启动到托盘，成功后仅退出当前实例"/>
-                    </WrapPanel>
-                    </StackPanel>
-                    <WrapPanel Grid.Row="1" Name="AppGroupActions">
-                        <Button Content="导入组文件..." Click="ImportAppGroup_Click"/>
-                        <Button Content="把所有已开 App 保存成组" Click="SaveAppGroup_Click"
-                                ToolTip="用同一程序的所有运行实例覆盖所选配置，包括隐藏到托盘的实例"/>
-                        <Button Content="当前配置另存为..." Click="SaveAppGroupAs_Click"/>
-                        <Button Content="创建桌面快捷方式" Click="CreateAppGroupShortcut_Click"
-                                ToolTip="创建所选组的桌面快捷方式；打开时保留原有实例"/>
-                    </WrapPanel>
-                    <DataGrid Grid.Row="2" Name="AppGroupGrid" Margin="5"
-                              IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False"
-                              CanUserDeleteRows="False" SelectionMode="Single" HeadersVisibility="Column"
-                              RowHeight="32" MinRowHeight="32">
-                        <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="图标" Width="64">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Click="ChangeAppGroupIcon_Click" ToolTip="点击更换图标"
-                                                MinWidth="0" Padding="2" Margin="1"
-                                                AutomationProperties.Name="更换 App 图标">
-                                            <Image Source="{Binding Logo}" Width="22" Height="22" Stretch="Uniform"/>
-                                        </Button>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="*"/>
-                            <DataGridTextColumn Header="所属实例" Binding="{Binding Instance}" Width="80"/>
-                            <DataGridTextColumn Header="快捷键" Binding="{Binding Hotkey}" Width="120"/>
-                            <DataGridTemplateColumn Header="操作" Width="182">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Button Content="启动" Click="StartAppGroupItem_Click"
-                                                    ToolTip="启动此行所属实例的全部标签页到托盘，保留其他实例"
-                                                    MinWidth="55" Margin="1" Padding="6,1"/>
-                                            <Button Content="编辑" Click="EditAppGroupItem_Click"
-                                                    MinWidth="55" Margin="1" Padding="6,1"/>
-                                            <Button Content="删除" Click="DeleteAppGroupItem_Click"
-                                                    MinWidth="55" Margin="1" Padding="6,1"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                    <StackPanel Grid.Row="3" Margin="5">
-                        <TextBlock Name="AppGroupStatusText" TextWrapping="Wrap"/>
-                        <TextBlock TextWrapping="Wrap" Foreground="Gray" Margin="0,5,0,0"
-                                   Text="每个 URL 一行，同一实例的页面加载时恢复到同一窗口。启动按钮恢复所属实例的全部标签页；编辑/删除只修改本行 URL，图标和快捷键由实例共享。删除不再确认；移除配置会删除 JSON。保存采集所有运行实例，另存为复制配置。加载组仅启动到托盘；加载并关闭仅退出当前实例。"/>
-                    </StackPanel>
-                </Grid>
+                <StackPanel Margin="20">
+                    <TextBlock Text="在独立窗口中管理 App 组，管理和编辑时仍可使用浏览器。"
+                               TextWrapping="Wrap" Margin="5,5,5,15"/>
+                    <Button Content="打开 App 组管理" HorizontalAlignment="Left"
+                            Click="OpenAppGroupManager_Click"/>
+                </StackPanel>
             </TabItem>
 
             <!-- 关于 -->

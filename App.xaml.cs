@@ -85,6 +85,7 @@ namespace TrayChrome
             double? customHeight = null; // 自定义窗口高度
             string? startupIcon = null;
             string? startupAppGroup = null;
+            Point? startupPosition = null;
             var startupTabs = new List<string>();
             
             if (e.Args.Length > 0)
@@ -146,6 +147,16 @@ namespace TrayChrome
                     if (arg.Equals("--icon", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
                     {
                         startupIcon = e.Args[++i];
+                        continue;
+                    }
+                    if (arg.Equals("--position", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+                    {
+                        string[] parts = e.Args[++i].Split(',');
+                        if (parts.Length == 2
+                            && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double left)
+                            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double top)
+                            && double.IsFinite(left) && double.IsFinite(top))
+                            startupPosition = new Point(left, top);
                         continue;
                     }
                     
@@ -239,6 +250,7 @@ namespace TrayChrome
             
             // 创建主窗口，传入启动参数
             mainWindow = new MainWindow(startupUrl, shouldUseCleanMode, shouldForceUncleanMode, customWidth, customHeight, startupTabs);
+            if (startupPosition.HasValue) mainWindow.SetStartupPosition(startupPosition.Value);
             LoadIconSetting();
             if (startupIcon != null)
             {
@@ -1099,7 +1111,7 @@ $Shortcut.Save()
   • 极简模式下 Alt + 左键拖动移动窗口
   • Ctrl + Shift + L：聚焦地址栏
   • Ctrl + Shift + 点击链接：用默认浏览器打开
-  • 设置 > App 组：保存全部实例、导入和切换多组 JSON 文件";
+  • 托盘右键 App 组管理 (G)：独立窗口管理多组 JSON 文件，加载 App 组子菜单直接加载";
 
             MessageBox.Show(helpText, "TrayChrome 帮助", MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1233,7 +1245,7 @@ $Shortcut.Save()
          // 初始化全局快捷键
         private void InitializeGlobalHotKey()
         {
-            if (hotKeyManager != null) return;
+            if (hotKeyManager != null || hotKeysSuspended) return;
             bool enabled = instanceHotkey != null
                 ? !string.IsNullOrWhiteSpace(instanceHotkey) : appSettings.EnableGlobalHotKey;
             if (enabled && mainWindow != null)

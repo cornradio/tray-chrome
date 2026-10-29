@@ -77,6 +77,7 @@ namespace TrayChrome
         private bool isDarkMode = false;
         private bool isTopMost = true; // 默认置顶
         private bool isSuperMinimalMode = false; // 超级极简模式状态
+        private bool isCtrlTabDown;
         private bool isAnimationEnabled = true; // 动画启用状态
         private bool hasSavedPosition = false; // 是否存在保存的位置
         private double lastVisibleLeft = double.NaN; // 上次隐藏前的可见位置
@@ -195,16 +196,18 @@ namespace TrayChrome
             if ((Keyboard.Modifiers == ModifierKeys.Control
                 || Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) && e.Key == Key.Tab)
             {
-                int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : 1;
-                SelectTab(tabs[(tabs.IndexOf(activeTab) + step + tabs.Count) % tabs.Count]);
+                if (!isCtrlTabDown && tabs.Count > 1)
+                {
+                    int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : 1;
+                    SelectTab(tabs[(tabs.IndexOf(activeTab) + step + tabs.Count) % tabs.Count]);
+                    isCtrlTabDown = true;
+                }
                 e.Handled = true;
                 return;
             }
             if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
             {
-                if (isSuperMinimalMode) ToggleSuperMinimalMode(false);
-                AddressBar.Focus();
-                AddressBar.SelectAll();
+                FocusAddressBar();
                 e.Handled = true;
                 return;
             }
@@ -224,6 +227,7 @@ namespace TrayChrome
                         return;
                     }
                 }
+
                 catch { }
             }
 
@@ -234,6 +238,12 @@ namespace TrayChrome
                 e.Handled = true;
                 return;
             }
+        }
+
+        private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Tab || e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl)
+                isCtrlTabDown = false;
         }
 
         private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -333,6 +343,7 @@ namespace TrayChrome
                 
                 // 监听右键菜单请求
                 webView.CoreWebView2.ContextMenuRequested += CoreWebView2_ContextMenuRequested;
+                webView.CoreWebView2.BasicAuthenticationRequested += CoreWebView2_BasicAuthenticationRequested;
                 
                 // 导航到启动URL或默认URL
                 string urlToNavigate = !string.IsNullOrEmpty(startupUrl) 
@@ -340,7 +351,7 @@ namespace TrayChrome
                     : "https://tva.cornradio.org/?name=search";
                 
                 webView.CoreWebView2.Navigate(urlToNavigate);
-                AddressBar.Text = urlToNavigate;
+                if (!(AddressBar.IsKeyboardFocused && addressBarEdited)) SetAddressBarText(urlToNavigate);
                 _ = Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
             }
             catch (Exception ex)
@@ -355,8 +366,31 @@ namespace TrayChrome
         {
             Dispatcher.Invoke(() =>
             {
-                AddressBar.Text = webView.CoreWebView2.Source;
+                // 用户正在地址栏输入时不覆盖其内容。
+                if (AddressBar.IsKeyboardFocused && addressBarEdited) return;
+                SetAddressBarText(webView.CoreWebView2.Source);
+                if (AddressBar.IsKeyboardFocused) AddressBar.SelectAll();
             });
+        }
+
+        private bool addressBarEdited;
+        private bool settingAddressBarText;
+
+        private void SetAddressBarText(string text)
+        {
+            settingAddressBarText = true;
+            try { AddressBar.Text = text; }
+            finally { settingAddressBarText = false; }
+        }
+
+        private void AddressBar_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!settingAddressBarText && AddressBar.IsKeyboardFocused) addressBarEdited = true;
+        }
+
+        private void AddressBar_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            addressBarEdited = false;
         }
 
         private void HandleBrowserDrag(string json)
@@ -586,18 +620,34 @@ namespace TrayChrome
                 proxySettingsItem.CustomItemSelected += (s, args) => ShowProxySettingsDialog();
                 subMenu.Children.Add(proxySettingsItem);
                 
-                subMenu.Children.Add(webView.CoreWebView2.Environment.CreateContextMenuItem("", null, CoreWebView2ContextMenuItemKind.Separator));
+                string authOrigin = BasicAuthStore.GetOrigin(webView.CoreWebView2.Source);
+                if (authOrigin != null && BasicAuthStore.Find(authOrigin) != null)
+                {
+                    subMenu.Children.Add(webView.CoreWebView2.Environment.CreateContextMenuItem("", null, CoreWebView2ContextMenuItemKind.Separator));
+                    var clearAuthItem = webView.CoreWebView2.Environment.CreateContextMenuItem(
+                        "清除本站保存的登录",
+                        null,
+                        CoreWebView2ContextMenuItemKind.Command);
+                    clearAuthItem.CustomItemSelected += (s, args) =>
+                    {
+                        BasicAuthStore.Remove(authOrigin);
+                        basicAuthFilled.Remove(authOrigin);
+                    };
+                    subMenu.Children.Add(clearAuthItem);
+                }
                 
-                // 3. 极简模式切换
+                // 极简模式切换放在根菜单，便于快速访问。
                 var minimalModeItem = webView.CoreWebView2.Environment.CreateContextMenuItem(
                     isSuperMinimalMode ? "退出极简模式" : "进入极简模式",
                     null,
                     CoreWebView2ContextMenuItemKind.Command);
                 minimalModeItem.CustomItemSelected += (s, args) => ToggleSuperMinimalMode(!isSuperMinimalMode);
-                subMenu.Children.Add(minimalModeItem);
                 
-                // 将 Tray Chrome 选项添加到右键菜单顶部
+                // 将常用切换项与 Tray Chrome 子菜单放在右键菜单根目录顶部。
                 e.MenuItems.Insert(0, subMenu);
+                e.MenuItems.Insert(0, webView.CoreWebView2.Environment.CreateContextMenuItem(
+                    "", null, CoreWebView2ContextMenuItemKind.Separator));
+                e.MenuItems.Insert(0, minimalModeItem);
             }
             catch (Exception ex)
             {
@@ -1162,6 +1212,7 @@ namespace TrayChrome
         {
             if (e.Key == Key.Enter)
             {
+                addressBarEdited = false;
                 NavigateToUrl(AddressBar.Text);
             }
         }
@@ -1611,6 +1662,41 @@ namespace TrayChrome
             {
                 MessageBox.Show($"加载设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        public void SetStartupPosition(System.Windows.Point position)
+        {
+            Left = position.X;
+            Top = position.Y;
+            lastVisibleLeft = position.X;
+            lastVisibleTop = position.Y;
+            hasSavedPosition = true;
+        }
+
+        public System.Windows.Point? GetNormalWindowPosition()
+        {
+            double left, top;
+            if (IsVisible && WindowState == WindowState.Normal)
+            {
+                left = Left;
+                top = Top;
+            }
+            else if (!double.IsNaN(lastVisibleLeft) && !double.IsNaN(lastVisibleTop))
+            {
+                left = lastVisibleLeft;
+                top = lastVisibleTop;
+            }
+            else if (WindowState != WindowState.Normal && !RestoreBounds.IsEmpty)
+            {
+                left = RestoreBounds.Left;
+                top = RestoreBounds.Top;
+            }
+            else
+            {
+                left = Left;
+                top = Top;
+            }
+            return double.IsFinite(left) && double.IsFinite(top) ? new System.Windows.Point(left, top) : null;
         }
 
         public Size GetNormalWindowSize()

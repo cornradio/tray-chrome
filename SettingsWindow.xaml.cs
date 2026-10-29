@@ -19,7 +19,7 @@ namespace TrayChrome
         private App? app;
 
         // 当前版本号
-        private const string CurrentVersion = "2.2.0";
+        private const string CurrentVersion = "3.0.1";
 
         // 标记设置是否已保存（用于非模态窗口）
         public bool SettingsSaved { get; private set; } = false;
@@ -97,8 +97,6 @@ namespace TrayChrome
             
             // 加载当前图标设置
             LoadIconSetting();
-            
-            InitializeAppGroups();
         }
 
         private void LoadSettingsToUI()
@@ -484,6 +482,15 @@ namespace TrayChrome
         private void OpenBookmarkManager_Click(object sender, RoutedEventArgs e)
         {
             (app ?? Application.Current as App)?.OpenBookmarkManager();
+        }
+
+        private void OpenAppGroupManager_Click(object sender, RoutedEventArgs e)
+        {
+            try { (app ?? Application.Current as App)?.OpenAppGroupManager(); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"打开 App 组管理失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void GitHubButton_Click(object sender, RoutedEventArgs e)

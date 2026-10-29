@@ -13,12 +13,39 @@ namespace TrayChrome
     public partial class App
     {
         private bool switchingAppGroup;
+        private bool hotKeysSuspended;
+        private AppGroupManagerWindow? appGroupManagerWindow;
+
+        // 先释放本实例快捷键，让组内新实例能注册相同组合；成功后退出本实例，失败则恢复快捷键。
+        public async Task<bool> LoadAppGroupReplacingCurrentAsync(string path)
+        {
+            if (switchingAppGroup) return false;
+            hotKeysSuspended = true;
+            hotKeyManager?.Dispose();
+            hotKeyManager = null;
+            bool loaded = false;
+            try
+            {
+                loaded = await LoadAppGroupAsync(path);
+                if (loaded) Shutdown();
+                return loaded;
+            }
+            finally
+            {
+                if (!loaded)
+                {
+                    hotKeysSuspended = false;
+                    InitializeGlobalHotKey();
+                }
+            }
+        }
 
         public AppGroupEntry CaptureCurrentApp()
         {
             if (mainWindow == null) throw new InvalidOperationException("主窗口尚未初始化。");
             if (!mainWindow.TabsReady) throw new InvalidOperationException("标签页尚未初始化完成，请稍后保存。");
             var normalSize = mainWindow.GetNormalWindowSize();
+            var position = mainWindow.GetNormalWindowPosition();
             return new AppGroupEntry
             {
                 Url = mainWindow.webView.CoreWebView2?.Source ?? mainWindow.AddressBar.Text,
@@ -26,9 +53,23 @@ namespace TrayChrome
                 IconPath = currentIconPath,
                 Width = normalSize.Width,
                 Height = normalSize.Height,
+                Left = position?.X,
+                Top = position?.Y,
                 IsSuperMinimalMode = mainWindow.IsSuperMinimalMode,
                 Hotkey = instanceHotkey ?? (appSettings.EnableGlobalHotKey ? appSettings.Hotkey : string.Empty)
             };
+        }
+
+        public void OpenUrlInNewInstance(string url)
+        {
+            var entry = CaptureCurrentApp();
+            entry.Url = url;
+            entry.Tabs.Clear();
+            // 新窗口不继承快捷键，避免与当前实例冲突；位置交给默认逻辑。
+            entry.Hotkey = string.Empty;
+            entry.Left = null;
+            entry.Top = null;
+            using var process = AppGroups.Start(entry, showWindow: true);
         }
 
         public void RestartCurrentInstance()
@@ -53,13 +94,10 @@ namespace TrayChrome
                         IsCheckable = true,
                         IsChecked = string.Equals(path, catalog.ActiveFile, StringComparison.OrdinalIgnoreCase)
                     };
-                    item.Click += async (s, args) => await LoadAppGroupAsync(path);
+                    item.Click += async (s, args) => await LoadAppGroupReplacingCurrentAsync(path);
                     menu.Items.Add(item);
                 }
-                menu.Items.Add(new Separator());
-                var settings = new MenuItem { Header = "管理 App 组..." };
-                settings.Click += (s, args) => OpenAppGroupSettings();
-                menu.Items.Add(settings);
+                if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "（暂无 App 组）", IsEnabled = false });
             }
             catch (Exception ex)
             {
@@ -67,17 +105,25 @@ namespace TrayChrome
             }
         }
 
-        private void OpenAppGroupSettings()
+        public AppGroupManagerWindow OpenAppGroupManager()
         {
-            if (mainWindow == null) return;
-            if (!mainWindow.IsLoaded)
+            if (appGroupManagerWindow == null)
             {
-                mainWindow.Show();
-                mainWindow.Hide();
+                var manager = new AppGroupManagerWindow();
+                appGroupManagerWindow = manager;
+                manager.Closed += (_, _) => appGroupManagerWindow = null;
             }
-            var window = new SettingsWindow(appSettings, mainWindow, this);
-            window.MainTabControl.SelectedItem = window.AppGroupsTab;
-            window.Show();
+            appGroupManagerWindow.ActivateManager();
+            return appGroupManagerWindow;
+        }
+
+        private void OpenAppGroupManager_Click(object sender, RoutedEventArgs e)
+        {
+            try { OpenAppGroupManager(); }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开 App 组管理失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         public string CreateAppGroupShortcut(string path)
