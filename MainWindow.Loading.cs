@@ -72,11 +72,9 @@ namespace TrayChrome
             if (!tab.View.IsVisible)
             {
                 tab.PaintMessage = null;
-                tab.HasPresented = false;
             }
-            else
+            else if (!tab.HasPresented)
             {
-                tab.LoadingStartedAt = DateTime.UtcNow;
                 _ = RequestPagePresentationAsync(tab);
             }
             UpdatePageLoadingIndicator();
@@ -85,7 +83,7 @@ namespace TrayChrome
         private async Task RequestPagePresentationAsync(BrowserTab tab)
         {
             var core = tab.View.CoreWebView2;
-            if (core == null || !tab.HasContent || !tab.View.IsVisible || tab.PaintMessage != null)
+            if (core == null || !tab.HasContent || tab.HasPresented || !tab.View.IsVisible || tab.PaintMessage != null)
                 return;
             string message = "traychrome-painted-" + Guid.NewGuid().ToString("N");
             tab.PaintMessage = message;
