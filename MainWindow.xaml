@@ -201,6 +201,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <DockPanel Name="TabToolbar" Background="{Binding Background, ElementName=TopToolbar}"
@@ -236,7 +237,26 @@
                              TextChanged="FindBox_TextChanged" PreviewKeyDown="FindBox_PreviewKeyDown"/>
                 </DockPanel>
             </Border>
-            <Grid Grid.Row="2" Name="BrowserHost">
+            <!-- 独立占一行，不隐藏原生 WebView2，以免阻止后台页面恢复绘制。 -->
+            <Border Grid.Row="2" Name="PageLoadingPanel" Visibility="Collapsed"
+                    Background="{Binding Background, ElementName=TopToolbar}">
+                <StackPanel Margin="6,4">
+                    <ProgressBar IsIndeterminate="True" Height="2"
+                                 Background="Transparent" BorderThickness="0" Foreground="#0A84FF"/>
+                    <DockPanel Margin="0,3,0,0">
+                        <TextBlock Name="PageLoadingText" Text="正在加载…" FontSize="11" Margin="0,0,6,0"
+                                   Foreground="{Binding Foreground, ElementName=AddressBar}"/>
+                        <TextBlock Name="PageLoadingHost" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" Opacity="0.6"
+                                   Foreground="{Binding Foreground, ElementName=AddressBar}"/>
+                    </DockPanel>
+                    <TextBlock Name="PageLoadingSlowHint" Margin="0,4,0,0" FontSize="11"
+                               TextWrapping="Wrap" TextAlignment="Center" Opacity="0.6" Visibility="Collapsed"
+                               Foreground="{Binding Foreground, ElementName=AddressBar}"
+                               Text="网站响应较慢，仍在等待…"/>
+                </StackPanel>
+            </Border>
+            <Grid Grid.Row="3" Name="BrowserHost">
                 <wv2:WebView2 Name="webView"/>
             </Grid>
         </Grid>

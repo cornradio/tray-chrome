@@ -324,6 +324,7 @@ namespace TrayChrome
                     if (view == webView) CoreWebView2_NavigationStarting(s, e);
                 };
                 webView.CoreWebView2.NavigationCompleted += (s, e) => { if (view == webView) CoreWebView2_NavigationCompleted(s, e); };
+                TrackPageLoading(view);
                 webView.CoreWebView2.SourceChanged += (s, e) => { RefreshTabTitle(view); if (view == webView) CoreWebView2_SourceChanged(s, e); };
                 
                 // 监听文档标题变化事件
@@ -1791,11 +1792,9 @@ namespace TrayChrome
                 appSettings.IsTopMost = isTopMost;
                 appSettings.IsSuperMinimalMode = isSuperMinimalMode;
                 appSettings.IsAnimationEnabled = isAnimationEnabled;
-                if (!hiddenPrepareHadNoPosition || (!double.IsNaN(lastVisibleLeft) && !double.IsNaN(lastVisibleTop)))
-                {
-                    appSettings.WindowLeft = !double.IsNaN(lastVisibleLeft) ? lastVisibleLeft : this.Left;
-                    appSettings.WindowTop = !double.IsNaN(lastVisibleTop) ? lastVisibleTop : this.Top;
-                }
+                var position = GetNormalWindowPosition();
+                appSettings.WindowLeft = position?.X;
+                appSettings.WindowTop = position?.Y;
                 appSettings.IsAdBlockEnabled = adBlocker.IsEnabled;
                 appSettings.AdBlockRules = adBlocker.BlockRules;
                 appSettings.AdAllowRules = adBlocker.AllowRules;
@@ -1811,6 +1810,7 @@ namespace TrayChrome
             }
             catch (Exception ex)
             {
+                (Application.Current as App)?.WriteDiagnostic("Save settings failed", ex);
                 MessageBox.Show($"保存设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -2283,6 +2283,10 @@ namespace TrayChrome
                     activeTab.ScriptId = null;
                     activeTab.UserScriptIds.Clear();
                     activeTab.ScriptMenus.Clear();
+                    activeTab.HasContent = false;
+                    activeTab.HasPresented = false;
+                    activeTab.PaintMessage = null;
+                    activeTab.IsLoading = false;
                     
                     // 4. 强制垃圾回收
                     GC.Collect();
@@ -2295,6 +2299,8 @@ namespace TrayChrome
                     // 6. 创建新实例并放回原位
                     webView = new Microsoft.Web.WebView2.Wpf.WebView2();
                     activeTab.View = webView;
+                    var replacementTab = activeTab;
+                    webView.IsVisibleChanged += (_, _) => RefreshPagePresentation(replacementTab);
                     webView.Name = "webView";
                     parent.Children.Insert(index, webView);
                     

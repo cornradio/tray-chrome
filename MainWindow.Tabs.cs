@@ -25,6 +25,13 @@ namespace TrayChrome
             public List<string> UserScriptIds { get; } = new();
             public List<ScriptMenuCommand> ScriptMenus { get; } = new();
             public AdBlocker Blocker { get; } = new();
+            public bool HasContent { get; set; }
+            public bool HasPresented { get; set; }
+            public string PaintMessage { get; set; }
+            public ulong NavigationId { get; set; }
+            public bool IsLoading { get; set; }
+            public DateTime LoadingStartedAt { get; set; } = DateTime.UtcNow;
+            public string LoadingUrl { get; set; }
         }
 
         private readonly List<BrowserTab> tabs = new();
@@ -55,6 +62,7 @@ namespace TrayChrome
             view.SizeChanged += (_, _) =>
                 Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
             var tab = new BrowserTab { View = view, Url = url };
+            view.IsVisibleChanged += (_, _) => RefreshPagePresentation(tab);
             tab.Header = new Button { Content = "新标签页", MaxWidth = 160,
                 Style = (Style)FindResource("TabHeaderStyle"), AllowDrop = true, Tag = tab };
             tab.Header.Click += (_, _) => SelectTab(tab);
@@ -195,6 +203,7 @@ namespace TrayChrome
                 webView.Focus();
             }
             RefreshFindForActiveTab();
+            UpdatePageLoadingIndicator();
         }
 
         private void UpdateTabTheme(bool darkMode)
