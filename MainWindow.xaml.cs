@@ -192,6 +192,13 @@ namespace TrayChrome
             {
                 if (e.Key == Key.T) { e.Handled = true; NewTab_Click(this, new RoutedEventArgs()); return; }
                 if (e.Key == Key.W) { e.Handled = true; CloseTab(activeTab); return; }
+                if (e.Key == Key.F) { e.Handled = true; ShowFindBar(); return; }
+            }
+            if (e.Key == Key.F3 && (Keyboard.Modifiers == ModifierKeys.None || Keyboard.Modifiers == ModifierKeys.Shift))
+            {
+                e.Handled = true;
+                FindStep(Keyboard.Modifiers != ModifierKeys.Shift);
+                return;
             }
             if ((Keyboard.Modifiers == ModifierKeys.Control
                 || Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) && e.Key == Key.Tab)
@@ -311,7 +318,11 @@ namespace TrayChrome
                 UpdateUIAppearance(isDarkMode);
                 
                 // 监听导航事件
-                webView.CoreWebView2.NavigationStarting += (s, e) => { if (view == webView) CoreWebView2_NavigationStarting(s, e); };
+                webView.CoreWebView2.NavigationStarting += (s, e) =>
+                {
+                    UserScriptNavigationStarting(view, e);
+                    if (view == webView) CoreWebView2_NavigationStarting(s, e);
+                };
                 webView.CoreWebView2.NavigationCompleted += (s, e) => { if (view == webView) CoreWebView2_NavigationCompleted(s, e); };
                 webView.CoreWebView2.SourceChanged += (s, e) => { RefreshTabTitle(view); if (view == webView) CoreWebView2_SourceChanged(s, e); };
                 
@@ -322,21 +333,29 @@ namespace TrayChrome
                 webView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
                 webView.CoreWebView2.WebMessageReceived += (_, args) =>
                 {
+                    if (HandleUserScriptMessage(view, args, null)) return;
                     if (view == webView) HandleBrowserDrag(args.WebMessageAsJson);
                 };
                 webView.CoreWebView2.FrameCreated += (_, args) =>
                 {
                     var frame = args.Frame;
-                    var frames = tabs.Single(tab => tab.View == view).Frames;
+                    var owner = tabs.Single(tab => tab.View == view);
+                    var frames = owner.Frames;
                     frames.Add(frame);
-                    frame.Destroyed += (_, _) => frames.Remove(frame);
+                    frame.Destroyed += (_, _) =>
+                    {
+                        frames.Remove(frame);
+                        owner.ScriptMenus.RemoveAll(command => command.Owner == frame);
+                    };
                     frame.WebMessageReceived += (_, message) =>
                     {
+                        if (HandleUserScriptMessage(view, message, frame)) return;
                         if (view == webView) HandleBrowserDrag(message.WebMessageAsJson);
                     };
                 };
                 webView.KeyDown += Window_PreviewKeyDown;
                 await UpdateBrowserDragAsync();
+                await ApplyUserScriptsAsync(tabs.Single(tab => tab.View == view));
                 
                 // 初始化广告拦截器（在 CoreWebView2 准备好后）
                 InitializeAdBlocker();
@@ -648,6 +667,7 @@ namespace TrayChrome
                 e.MenuItems.Insert(0, webView.CoreWebView2.Environment.CreateContextMenuItem(
                     "", null, CoreWebView2ContextMenuItemKind.Separator));
                 e.MenuItems.Insert(0, minimalModeItem);
+                AddUserScriptMenuItems(e, subMenu, 3);
             }
             catch (Exception ex)
             {
@@ -2261,6 +2281,8 @@ namespace TrayChrome
                     webView.Dispose();
                     activeTab.Frames.Clear();
                     activeTab.ScriptId = null;
+                    activeTab.UserScriptIds.Clear();
+                    activeTab.ScriptMenus.Clear();
                     
                     // 4. 强制垃圾回收
                     GC.Collect();

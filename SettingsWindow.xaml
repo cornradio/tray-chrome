@@ -38,7 +38,7 @@
         </Grid.RowDefinitions>
         
         <!-- 主内容区域 - 使用 TabControl 分类 -->
-        <TabControl Name="MainTabControl" Grid.Row="0" Margin="0,0,0,10">
+        <TabControl Name="MainTabControl" Grid.Row="0" Margin="0,0,0,10" SelectionChanged="MainTabControl_UserScriptsSelectionChanged">
             <!-- 窗口设置 -->
             <TabItem Header="窗口设置">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -250,6 +250,9 @@
                                     <Run Text="• Ctrl + Shift + L：" FontWeight="Bold"/>
                                     <Run Text="聚焦到地址栏"/>
                                     <LineBreak/>
+                                    <Run Text="• Ctrl + F：" FontWeight="Bold"/>
+                                    <Run Text="在页面中查找（Enter/F3 下一个，Shift+Enter/Shift+F3 上一个，Esc 关闭）"/>
+                                    <LineBreak/>
                                     <Run Text="• Ctrl + R：" FontWeight="Bold"/>
                                     <Run Text="刷新当前页面"/>
                                     <LineBreak/>
@@ -291,6 +294,43 @@
                     <Button Content="打开 App 组管理" HorizontalAlignment="Left"
                             Click="OpenAppGroupManager_Click"/>
                 </StackPanel>
+            </TabItem>
+
+            <TabItem Header="脚本" Name="UserScriptsTab">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <WrapPanel>
+                        <Button Content="新建" Click="NewUserScript_Click"/>
+                        <Button Content="从 URL 安装..." Click="InstallUserScript_Click"/>
+                        <Button Content="编辑" Click="EditUserScript_Click"/>
+                        <Button Content="删除" Click="DeleteUserScript_Click"/>
+                        <Button Content="打开文件夹" Click="OpenUserScriptFolder_Click"/>
+                    </WrapPanel>
+                    <ListView Grid.Row="1" Name="UserScriptList" Margin="5"
+                              MouseDoubleClick="UserScriptList_MouseDoubleClick" KeyDown="UserScriptList_KeyDown">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="启用" Width="45">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding Enabled, Mode=OneWay}" Margin="0"
+                                                      Click="UserScriptEnabled_Click"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="名称" Width="170" DisplayMemberBinding="{Binding Name}"/>
+                                <GridViewColumn Header="版本" Width="60" DisplayMemberBinding="{Binding Version}"/>
+                                <GridViewColumn Header="匹配" Width="300" DisplayMemberBinding="{Binding MatchSummary}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                    <TextBlock Grid.Row="2" Name="UserScriptStatus" Margin="5" Foreground="Gray" TextWrapping="Wrap"
+                               Text="支持 @match/@include/@exclude/@run-at/@require/@resource 及常用 GM_* 接口。修改后刷新网页生效；在网页中打开 .user.js 链接（如 Greasy Fork 的安装按钮）可直接安装。"/>
+                </Grid>
             </TabItem>
 
             <!-- 关于 -->

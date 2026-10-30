@@ -431,6 +431,12 @@ namespace TrayChrome
 
         private void OpenSettings_Click(object sender, RoutedEventArgs e) => OpenSettings();
 
+        public void ShowTrayNotification(string title, string text)
+        {
+            try { trayIcon?.ShowBalloonTip(title, text, BalloonIcon.Info); }
+            catch (Exception ex) { WriteDiagnostic("Showing tray notification failed", ex); }
+        }
+
         private void OpenSettings(bool showIconSection = false)
         {
             try
@@ -1248,19 +1254,35 @@ $Shortcut.Save()
         // 切换主窗口显示/隐藏
         private void ToggleMainWindow()
         {
-            if (mainWindow != null)
+            if (mainWindow == null) return;
+
+            // 1. 已收起：召唤出来
+            if (!mainWindow.IsVisible)
             {
-                if (mainWindow.IsVisible)
-                {
-                    mainWindow.HideWithAnimation();
-                }
-                else
-                {
-                    mainWindow.ShowWithAnimation();
-                    mainWindow.WindowState = WindowState.Normal;
-                    mainWindow.Activate();
-                }
+                mainWindow.ShowWithAnimation();
+                mainWindow.WindowState = WindowState.Normal;
+                mainWindow.Activate();
+                return;
             }
+
+            if (mainWindow.WindowState == WindowState.Minimized)
+            {
+                mainWindow.WindowState = WindowState.Normal;
+                mainWindow.Activate();
+                return;
+            }
+
+            // 2. 未收起但被其他窗口挡住：提到最上层
+            var handle = new System.Windows.Interop.WindowInteropHelper(mainWindow).Handle;
+            if (WindowZOrder.IsCoveredByOtherWindow(handle))
+            {
+                WriteDiagnostic("Hotkey: window covered, bringing to front");
+                mainWindow.Activate();
+                return;
+            }
+
+            // 3. 未收起且在最上层：收起
+            mainWindow.HideWithAnimation();
         }
     }
 }

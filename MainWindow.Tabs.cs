@@ -22,6 +22,8 @@ namespace TrayChrome
             public int HistoryIndex { get; set; } = -1;
             public List<Microsoft.Web.WebView2.Core.CoreWebView2Frame> Frames { get; } = new();
             public string ScriptId { get; set; }
+            public List<string> UserScriptIds { get; } = new();
+            public List<ScriptMenuCommand> ScriptMenus { get; } = new();
             public AdBlocker Blocker { get; } = new();
         }
 
@@ -192,6 +194,7 @@ namespace TrayChrome
                 UpdateBrowserDrag();
                 webView.Focus();
             }
+            RefreshFindForActiveTab();
         }
 
         private void UpdateTabTheme(bool darkMode)

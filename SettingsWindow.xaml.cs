@@ -19,7 +19,7 @@ namespace TrayChrome
         private App? app;
 
         // 当前版本号
-        private const string CurrentVersion = "3.0.1";
+        private const string CurrentVersion = "3.1.0";
 
         // 标记设置是否已保存（用于非模态窗口）
         public bool SettingsSaved { get; private set; } = false;

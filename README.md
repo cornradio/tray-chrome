@@ -22,6 +22,8 @@
 - 🎨 **超级极简模式**：隐藏工具栏，纯净浏览体验
 - **Alt 拖动**：极简模式下按住 Alt 并左键拖动网页即可移动窗口，不会触发网页点击
 - **App 组**：保存所有实例的 URL、图标和窗口尺寸，在独立的 App 组管理窗口或托盘右键菜单中切换多组 JSON 文件
+- 🐒 **油猴脚本**：内置轻量脚本引擎，支持常见 Tampermonkey / Greasemonkey 用户脚本（见下方「油猴脚本」）
+- 🔍 **页内查找**：Ctrl+F 查找当前网页文字
 - 🔄 **多实例支持**：可同时运行多个独立的浏览器实例
 - **实例内多标签页**：同一窗口内新增、切换和关闭网页，共用一个托盘图标和实例快捷键。
 - 🌙 **暗色模式**：支持网页暗色模式切换
@@ -40,6 +42,7 @@
 
 | 快捷键                     | 功能                         |
 |---------------------------|------------------------------|
+| 全局快捷键（默认 `Alt + X`，App 组可单独设置） | 窗口已收起时召唤出来；未收起但被其他程序窗口挡住时提到最上层；未收起且在最上层时收起 |
 | `中键(tray icon)`                | 关闭 TrayChrome 实例          |
 | `Ctrl + 中键(tray icon)`                | 关闭当前实例                  |
 | `Ctrl + Shift + L`        | 聚焦到地址栏（极简模式会先显示工具栏） |
@@ -135,6 +138,24 @@
 - **配置格式**：窗口、托盘和管理器统一使用程序目录中的 `Bookmarks.chrome.json`，采用 Chrome Bookmarks 的 `version` / `roots` / `type` / `name` / `url` / `children` 结构。旧 `bookmarks.json` 保留但不自动迁移或继续读取；这是 TrayChrome 自己的文件，不会改写本机 Chrome 配置。与浏览器交换书签请使用 HTML 导入/导出，不要运行中直接覆盖 Chrome 的内部文件。
 - **快速访问**：收藏夹菜单中直接点击网站名称
 
+
+### 页内查找
+
+按 Ctrl+F 在网页上方打开查找栏（查找栏占一行，不遮挡网页；若网页中已选中单行文字会自动填入）。输入即查找，不区分大小写，并高亮全部结果，右侧显示「第几个/共几个」。Enter 或 F3 跳到下一个，Shift+Enter 或 Shift+F3 跳到上一个，Esc 关闭。切换标签页时会在新页面上继续查找。
+
+### 油猴脚本
+
+「设置 → 脚本」管理用户脚本：勾选启用/禁用、新建、编辑（Ctrl+S 保存）、从 URL 安装、删除（移到回收站，不确认）、打开文件夹。脚本保存在程序目录的 `userscripts\*.user.js`，也可以直接把文件放进去；改动会自动同步到所有运行中的实例，**已打开的网页刷新后生效**。在网页中打开 `.user.js` 链接（例如 Greasy Fork 的「安装此脚本」按钮）会弹窗显示名称、匹配网址和权限，确认后安装或更新。网页右键「Tray Chrome 选项 → 管理脚本...」可快速进入；脚本通过 `GM_registerMenuCommand` 注册的命令显示在网页右键「脚本命令」。
+
+支持的元数据：`@name`（含 `@name:zh-CN`）、`@namespace`、`@version`、`@description`、`@match`、`@include`（通配符或 `/正则/`）、`@exclude`、`@exclude-match`、`@run-at`（document-start / document-end / document-idle）、`@noframes`、`@require`、`@resource`、`@grant`、`@connect`。没有 `@match`/`@include` 的脚本匹配所有网页。
+
+支持的接口：`GM_info`、`GM_addStyle`、`GM_addElement`、`GM_getValue`/`GM_setValue`/`GM_deleteValue`/`GM_listValues`、`GM_xmlhttpRequest`、`GM_openInTab`（在本实例新标签页打开）、`GM_setClipboard`、`GM_notification`（托盘气泡）、`GM_registerMenuCommand`/`GM_unregisterMenuCommand`、`GM_getResourceText`/`GM_getResourceURL`、`GM_log`、`unsafeWindow`，以及对应的 `GM.*` Promise 版本。
+
+- 脚本运行在网页环境中（相当于 Tampermonkey 的 page 注入），`unsafeWindow` 即 `window`。不支持 `window.onurlchange`、`GM_download`、`GM_cookie`、`GM_webRequest`、标签页相关的 `GM_getTab` 等。
+- `GM_xmlhttpRequest` 可跨域，自动附带目标站点在本浏览器中的 Cookie（`anonymous: true` 时不带）；必须声明 `@grant GM_xmlhttpRequest`（或 `GM.xmlHttpRequest`），声明了 `@connect` 时只允许访问列出的域名。
+- 每个脚本单独注入，某个脚本有语法错误不影响其他脚本；运行错误输出到 F12 控制台。
+- `GM_setValue` 数据按脚本保存在 `userscripts\.values`，所有网站共享；`@require`/`@resource` 安装时下载并缓存到 `userscripts\.cache`，缺失时启动后自动补下载。
+- 脚本可以读取和修改匹配网页的内容，并以你的登录身份发起请求，请只安装信任的脚本。
 
 ## 📁 文件存储
 
