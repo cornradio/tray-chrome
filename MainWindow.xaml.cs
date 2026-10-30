@@ -70,7 +70,7 @@ namespace TrayChrome
         private bool isMobileUA = true;
         private const string MobileUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
         private const string DesktopUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-        private double currentZoomFactor = 1.0;
+        private double currentZoomFactor = 0.8;
         private AppSettings appSettings = new AppSettings();
         private bool isResizing = false;
         private Point resizeStartPoint;
@@ -526,9 +526,6 @@ namespace TrayChrome
                     UpdateHistory(webView.Source.ToString(), webView.CoreWebView2.DocumentTitle);
                 }
 
-                // 确保每个页面都使用相同的缩放比例
-                webView.ZoomFactor = currentZoomFactor;
-                
                 // 外观模式已在初始化时设置
                 
                 // 更新托盘图标提示
@@ -2358,14 +2355,7 @@ namespace TrayChrome
                 appSettings.WindowWidth = settings.WindowWidth;
                 appSettings.WindowHeight = settings.WindowHeight;
                 // 应用缩放
-                if (settings.AutoZoomOutOnStartup)
-                {
-                    currentZoomFactor = 0.8;
-                }
-                else
-                {
-                    currentZoomFactor = settings.ZoomFactor;
-                }
+                currentZoomFactor = settings.ZoomFactor;
 
                 if (webView?.CoreWebView2 != null)
                 {
@@ -2603,7 +2593,7 @@ namespace TrayChrome
             }
         }
 
-        public double ZoomFactor { get; set; } = 1.0;
+        public double ZoomFactor { get; set; } = 0.8;
         public bool IsMobileUA { get; set; } = true;
         public double WindowWidth { get; set; } = 360;
         public double WindowHeight { get; set; } = 640;
@@ -2630,9 +2620,6 @@ namespace TrayChrome
         // 全局快捷键设置
         public string Hotkey { get; set; } = "alt + x";
         public bool EnableGlobalHotKey { get; set; } = true;
-        
-        // 启动设置
-        public bool AutoZoomOutOnStartup { get; set; } = true;
         
         // 内部使用的快捷键解析属性
         public uint HotKeyModifiers 

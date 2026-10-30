@@ -23,11 +23,20 @@ try {
     }
     New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
     $destinationExe = Join-Path $destinationPath 'TrayChrome.exe'
+    $runningInstances = @(Get-Process -Name 'TrayChrome' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $destinationExe })
+    foreach ($instance in $runningInstances) {
+        Write-Host "Stopping TrayChrome instance $($instance.Id) before deployment..." -ForegroundColor Yellow
+        Stop-Process -Id $instance.Id -Force -ErrorAction Stop
+        if (-not $instance.WaitForExit(10000)) {
+            throw "TrayChrome instance $($instance.Id) did not exit; deployment skipped."
+        }
+    }
     Copy-Item -LiteralPath $sourcePath -Destination $destinationExe -Force
     Write-Host "Copied executable to $destinationExe" -ForegroundColor Green
     Write-Host 'Existing settings, App groups and icons were not changed.' -ForegroundColor Gray
 } catch {
     Write-Host "Packaging/deployment failed: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host 'If the destination executable is in use, close its instances and retry. This script does not stop them.' -ForegroundColor Yellow
+    Write-Host 'Check permissions and ensure the destination executable is not locked, then retry.' -ForegroundColor Yellow
     exit 1
 }

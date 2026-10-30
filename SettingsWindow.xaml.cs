@@ -42,7 +42,6 @@ namespace TrayChrome
         private string customIconPath = string.Empty;
         public bool IsProxyEnabled { get; set; }
         public string ProxyServer { get; set; } = string.Empty;
-        public bool AutoZoomOutOnStartup { get; set; }
         public bool EnableRoundedCorners { get; set; }
         public double CornerRadiusPx { get; set; }
 
@@ -84,7 +83,6 @@ namespace TrayChrome
                 EnableGlobalHotKey = settings.EnableGlobalHotKey,
                 IsProxyEnabled = settings.IsProxyEnabled,
                 ProxyServer = settings.ProxyServer,
-                AutoZoomOutOnStartup = settings.AutoZoomOutOnStartup,
                 EnableRoundedCorners = settings.EnableRoundedCorners,
                 CornerRadiusPx = settings.CornerRadiusPx
             };
@@ -116,7 +114,6 @@ namespace TrayChrome
             Hotkey = currentSettings.Hotkey;
             IsProxyEnabled = currentSettings.IsProxyEnabled;
             ProxyServer = currentSettings.ProxyServer;
-            AutoZoomOutOnStartup = currentSettings.AutoZoomOutOnStartup;
             EnableRoundedCorners = currentSettings.EnableRoundedCorners;
             CornerRadiusPx = currentSettings.CornerRadiusPx;
         }
@@ -196,11 +193,6 @@ namespace TrayChrome
 
             ProxyServerTextBox.Text = ProxyServer;
             ProxyServerTextBox.TextChanged += (s, e) => ProxyServer = ProxyServerTextBox.Text;
-
-            // 启动缩放
-            AutoZoomOutCheckBox.IsChecked = AutoZoomOutOnStartup;
-            AutoZoomOutCheckBox.Checked += (s, e) => AutoZoomOutOnStartup = true;
-            AutoZoomOutCheckBox.Unchecked += (s, e) => AutoZoomOutOnStartup = false;
 
             // 圆角设置
             RoundedCornersCheckBox.IsChecked = EnableRoundedCorners;
@@ -355,7 +347,6 @@ namespace TrayChrome
                 currentSettings.Hotkey = Hotkey;
                 currentSettings.IsProxyEnabled = IsProxyEnabled;
                 currentSettings.ProxyServer = ProxyServer;
-                currentSettings.AutoZoomOutOnStartup = AutoZoomOutOnStartup;
                 currentSettings.EnableRoundedCorners = EnableRoundedCorners;
 
                 // 验证圆角大小
@@ -481,7 +472,6 @@ namespace TrayChrome
             target.EnableGlobalHotKey = source.EnableGlobalHotKey;
             target.IsProxyEnabled = source.IsProxyEnabled;
             target.ProxyServer = source.ProxyServer;
-            target.AutoZoomOutOnStartup = source.AutoZoomOutOnStartup;
             target.EnableRoundedCorners = source.EnableRoundedCorners;
             target.CornerRadiusPx = source.CornerRadiusPx;
         }

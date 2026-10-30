@@ -201,8 +201,8 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <DockPanel Name="TabToolbar" Background="{Binding Background, ElementName=TopToolbar}"
                        Visibility="Collapsed">
@@ -237,26 +237,26 @@
                              TextChanged="FindBox_TextChanged" PreviewKeyDown="FindBox_PreviewKeyDown"/>
                 </DockPanel>
             </Border>
-            <!-- 独立占一行，不隐藏原生 WebView2，以免阻止后台页面恢复绘制。 -->
-            <Border Grid.Row="2" Name="PageLoadingPanel" Visibility="Collapsed"
+            <!-- 加载完成后折叠整行，不预留空白。 -->
+            <Border Grid.Row="3" Name="PageLoadingPanel" Visibility="Collapsed" Height="24" ClipToBounds="True"
                     Background="{Binding Background, ElementName=TopToolbar}">
-                <StackPanel Margin="6,4">
+                <StackPanel Margin="6,2">
                     <ProgressBar IsIndeterminate="True" Height="2"
                                  Background="Transparent" BorderThickness="0" Foreground="#0A84FF"/>
-                    <DockPanel Margin="0,3,0,0">
+                    <DockPanel Margin="0,1,0,0">
                         <TextBlock Name="PageLoadingText" Text="正在加载…" FontSize="11" Margin="0,0,6,0"
                                    Foreground="{Binding Foreground, ElementName=AddressBar}"/>
                         <TextBlock Name="PageLoadingHost" FontSize="11"
                                    TextTrimming="CharacterEllipsis" Opacity="0.6"
                                    Foreground="{Binding Foreground, ElementName=AddressBar}"/>
+                        <TextBlock Name="PageLoadingSlowHint" Margin="6,0,0,0" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" Opacity="0.6" Visibility="Collapsed"
+                                   Foreground="{Binding Foreground, ElementName=AddressBar}"
+                                   Text="网站响应较慢，仍在等待…"/>
                     </DockPanel>
-                    <TextBlock Name="PageLoadingSlowHint" Margin="0,4,0,0" FontSize="11"
-                               TextWrapping="Wrap" TextAlignment="Center" Opacity="0.6" Visibility="Collapsed"
-                               Foreground="{Binding Foreground, ElementName=AddressBar}"
-                               Text="网站响应较慢，仍在等待…"/>
                 </StackPanel>
             </Border>
-            <Grid Grid.Row="3" Name="BrowserHost">
+            <Grid Grid.Row="2" Name="BrowserHost">
                 <wv2:WebView2 Name="webView"/>
             </Grid>
         </Grid>

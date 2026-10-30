@@ -150,7 +150,6 @@
                                             TickPlacement="BottomRight" Margin="5"/>
                                     <Label Grid.Column="2" Name="ZoomValueLabel" MinWidth="50"/>
                                 </Grid>
-                                <CheckBox Name="AutoZoomOutCheckBox" Content="启动后自动缩小比例 (80%)" Margin="5,0,5,5"/>
                             </StackPanel>
                         </GroupBox>
                         
