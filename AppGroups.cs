@@ -190,7 +190,7 @@ namespace TrayChrome
             }
         }
 
-        public static async Task<List<int>> GetInstanceIdsAsync()
+        public static List<int> GetInstanceProcessIds()
         {
             string executable = Environment.ProcessPath ?? throw new InvalidOperationException("无法获取程序路径。");
             var ids = new List<int>();
@@ -198,12 +198,25 @@ namespace TrayChrome
             {
                 using (process)
                 {
-                    if (process.HasExited) continue;
-                    if (string.Equals(process.MainModule?.FileName, executable, StringComparison.OrdinalIgnoreCase))
-                        ids.Add(process.Id);
+                    try
+                    {
+                        if (process.HasExited) continue;
+                        if (string.Equals(process.MainModule?.FileName, executable, StringComparison.OrdinalIgnoreCase))
+                            ids.Add(process.Id);
+                    }
+                    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException)
+                    {
+                        // 进程刚好退出或无权访问时跳过。
+                    }
                 }
             }
             ids.Sort();
+            return ids;
+        }
+
+        public static async Task<List<int>> GetInstanceIdsAsync()
+        {
+            var ids = GetInstanceProcessIds();
             // 检查所有实例均支持协议，避免导出残缺快照。
             foreach (int id in ids) await InstanceService.RequestAsync(id, "ping");
             return ids;

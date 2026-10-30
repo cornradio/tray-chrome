@@ -1294,6 +1294,16 @@ namespace TrayChrome
             if (double.IsNaN(targetTop) || double.IsInfinity(targetTop))
                 targetTop = Top;
 
+            if (hiddenPrepareHadNoPosition)
+            {
+                if (!double.IsFinite(lastVisibleLeft) || !double.IsFinite(lastVisibleTop))
+                {
+                    targetLeft = double.NaN;
+                    targetTop = double.NaN;
+                }
+                hiddenPrepareHadNoPosition = false;
+            }
+
             if (double.IsNaN(targetLeft) || double.IsInfinity(targetLeft))
                 targetLeft = workingArea.Right - Width - 20;
             if (double.IsNaN(targetTop) || double.IsInfinity(targetTop) || targetTop >= workingArea.Bottom)
@@ -1664,6 +1674,31 @@ namespace TrayChrome
             }
         }
 
+        private bool hiddenPrepareHadNoPosition;
+
+        // WPF 版 WebView2 只有在宿主窗口真正 Show 过后才会创建控件并初始化；
+        // 后台启动时在屏幕外以透明、不激活的方式显示一次再立即隐藏，避免实例一直处于未就绪状态。
+        public void PrepareHiddenWindow()
+        {
+            double left = Left, top = Top, opacity = Opacity;
+            var startupLocation = WindowStartupLocation;
+            bool showActivated = ShowActivated;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            ShowActivated = false;
+            Opacity = 0;
+            Left = -32000;
+            Top = -32000;
+            Show();
+            Hide();
+            Left = left;
+            Top = top;
+            // Show 过后 WPF 会把未设置的 Left/Top 填成实际值；记下来以免当成用户位置。
+            hiddenPrepareHadNoPosition = !double.IsFinite(left) || !double.IsFinite(top);
+            Opacity = opacity;
+            ShowActivated = showActivated;
+            WindowStartupLocation = startupLocation;
+        }
+
         public void SetStartupPosition(System.Windows.Point position)
         {
             Left = position.X;
@@ -1690,6 +1725,10 @@ namespace TrayChrome
             {
                 left = RestoreBounds.Left;
                 top = RestoreBounds.Top;
+            }
+            else if (hiddenPrepareHadNoPosition)
+            {
+                return null;
             }
             else
             {
@@ -1732,8 +1771,11 @@ namespace TrayChrome
                 appSettings.IsTopMost = isTopMost;
                 appSettings.IsSuperMinimalMode = isSuperMinimalMode;
                 appSettings.IsAnimationEnabled = isAnimationEnabled;
-                appSettings.WindowLeft = !double.IsNaN(lastVisibleLeft) ? lastVisibleLeft : this.Left;
-                appSettings.WindowTop = !double.IsNaN(lastVisibleTop) ? lastVisibleTop : this.Top;
+                if (!hiddenPrepareHadNoPosition || (!double.IsNaN(lastVisibleLeft) && !double.IsNaN(lastVisibleTop)))
+                {
+                    appSettings.WindowLeft = !double.IsNaN(lastVisibleLeft) ? lastVisibleLeft : this.Left;
+                    appSettings.WindowTop = !double.IsNaN(lastVisibleTop) ? lastVisibleTop : this.Top;
+                }
                 appSettings.IsAdBlockEnabled = adBlocker.IsEnabled;
                 appSettings.AdBlockRules = adBlocker.BlockRules;
                 appSettings.AdAllowRules = adBlocker.AllowRules;
@@ -1961,19 +2003,25 @@ namespace TrayChrome
                     unchecked((short)((coordinates >> 16) & 0xFFFF)));
                 point = PointFromScreen(point);
                 
-                const int resizeBorder = 5;
+                // 外圈阴影边距（MainBorder.Margin）整体作为调整大小区域；网页 HWND 会吞掉其内部的鼠标消息。
+                double resizeBorder = Math.Max(5, MainBorder.Margin.Left);
+                double cornerSize = resizeBorder + 16;
                 
                 // 检查是否在边缘
                 bool onLeft = point.X <= resizeBorder;
                 bool onRight = point.X >= ActualWidth - resizeBorder;
                 bool onTop = point.Y <= resizeBorder;
                 bool onBottom = point.Y >= ActualHeight - resizeBorder;
-                
-                // 返回相应的调整大小区域
-                if (onTop && onLeft) { handled = true; return new IntPtr(HTTOPLEFT); }
-                if (onTop && onRight) { handled = true; return new IntPtr(HTTOPRIGHT); }
-                if (onBottom && onLeft) { handled = true; return new IntPtr(HTBOTTOMLEFT); }
-                if (onBottom && onRight) { handled = true; return new IntPtr(HTBOTTOMRIGHT); }
+                bool nearLeft = point.X <= cornerSize;
+                bool nearRight = point.X >= ActualWidth - cornerSize;
+                bool nearTop = point.Y <= cornerSize;
+                bool nearBottom = point.Y >= ActualHeight - cornerSize;
+
+                // 角落沿两条边各延伸一段，便于抓取
+                if ((onTop && nearLeft) || (onLeft && nearTop)) { handled = true; return new IntPtr(HTTOPLEFT); }
+                if ((onTop && nearRight) || (onRight && nearTop)) { handled = true; return new IntPtr(HTTOPRIGHT); }
+                if ((onBottom && nearLeft) || (onLeft && nearBottom)) { handled = true; return new IntPtr(HTBOTTOMLEFT); }
+                if ((onBottom && nearRight) || (onRight && nearBottom)) { handled = true; return new IntPtr(HTBOTTOMRIGHT); }
                 if (onTop) { handled = true; return new IntPtr(HTTOP); }
                 if (onBottom) { handled = true; return new IntPtr(HTBOTTOM); }
                 if (onLeft) { handled = true; return new IntPtr(HTLEFT); }

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Media;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -19,12 +20,22 @@ namespace TrayChrome
         private AppGroup? displayedAppGroup;
         private string? displayedPath;
         private Window? editDialog;
+        private bool isLiveView;
+        private bool refreshingLive;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool AllowSetForegroundWindow(int processId);
 
         public AppGroupManagerWindow()
         {
             InitializeComponent();
             InitializeAppGroups();
             Closed += (_, _) => editDialog?.Close();
+            // 「当前运行中」视图在窗口重新激活时自动刷新，反映其他实例的最新状态。
+            Activated += (_, _) =>
+            {
+                if (isLiveView && editDialog == null && AppGroupGrid.IsEnabled) _ = ShowLiveInstancesAsync();
+            };
         }
 
         private string? SelectedAppGroupPath => (AppGroupFilesComboBox.SelectedItem as AppGroupFileOption)?.FilePath;
@@ -33,11 +44,13 @@ namespace TrayChrome
         private sealed class AppGroupFileOption
         {
             public string? FilePath { get; }
+            public bool IsLive { get; }
             public string FileName { get; }
-            public AppGroupFileOption(string? path)
+            public AppGroupFileOption(string? path, bool isLive = false)
             {
                 FilePath = path;
-                FileName = path == null ? "＋ 新建组..." : Path.GetFileName(path);
+                IsLive = isLive;
+                FileName = isLive ? "● 当前运行中" : path == null ? "＋ 新建组..." : Path.GetFileName(path);
             }
         }
 
@@ -45,15 +58,19 @@ namespace TrayChrome
         {
             public AppGroupEntry Entry { get; }
             public int Index { get; }
+            public int? ProcessId { get; }
             public IReadOnlyList<string> AllUrls { get; }
             public string Urls => string.Join("   |   ", AllUrls);
             public string UrlList => string.Join(Environment.NewLine, AllUrls);
             public string Hotkey => string.IsNullOrWhiteSpace(Entry.Hotkey) ? "未设置" : Entry.Hotkey;
+            public string InstanceLabel => ProcessId == null ? string.Empty
+                : ProcessId == Environment.ProcessId ? $"{ProcessId}（本实例）" : ProcessId.Value.ToString();
             public ImageSource Logo { get; }
-            public AppGroupRow(AppGroupEntry entry, int index)
+            public AppGroupRow(AppGroupEntry entry, int index, int? processId = null)
             {
                 Entry = entry;
                 Index = index;
+                ProcessId = processId;
                 AllUrls = new[] { entry.Url }.Concat(entry.Tabs).ToList();
                 Logo = IconSettings.LoadImage(entry.IconPath);
             }
@@ -71,21 +88,24 @@ namespace TrayChrome
             }
         }
 
-        private void InitializeAppGroups(string? selectedPath = null)
+        private void InitializeAppGroups(string? selectedPath = null, bool selectLive = false)
         {
             try
             {
                 var catalog = AppGroups.LoadCatalog();
-                var options = catalog.Files.Select(path => new AppGroupFileOption(path)).ToList();
+                var options = new List<AppGroupFileOption> { new AppGroupFileOption(null, isLive: true) };
+                options.AddRange(catalog.Files.Select(path => new AppGroupFileOption(path)));
                 options.Add(new AppGroupFileOption(null));
                 string? target = selectedPath ?? catalog.ActiveFile;
                 updatingGroupFiles = true;
                 AppGroupFilesComboBox.ItemsSource = options;
-                AppGroupFilesComboBox.SelectedItem = options.FirstOrDefault(option => option.FilePath != null
-                    && string.Equals(option.FilePath, target, StringComparison.OrdinalIgnoreCase))
-                    ?? options.FirstOrDefault(option => option.FilePath != null);
+                AppGroupFilesComboBox.SelectedItem = selectLive ? options[0]
+                    : options.FirstOrDefault(option => option.FilePath != null
+                        && string.Equals(option.FilePath, target, StringComparison.OrdinalIgnoreCase))
+                    ?? options.FirstOrDefault(option => option.FilePath != null)
+                    ?? options[0];
                 updatingGroupFiles = false;
-                ShowSelectedAppGroup();
+                ShowSelected();
             }
             catch (Exception ex)
             {
@@ -94,16 +114,124 @@ namespace TrayChrome
             }
         }
 
+        private void ShowSelected()
+        {
+            if (AppGroupFilesComboBox.SelectedItem is AppGroupFileOption { IsLive: true })
+            {
+                _ = ShowLiveInstancesAsync();
+                return;
+            }
+            SetLiveMode(false);
+            ShowSelectedAppGroup();
+        }
+
+        private void SetLiveMode(bool live)
+        {
+            isLiveView = live;
+            LoadAppGroupButton.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
+            RefreshLiveButton.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+            InstanceColumn.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+            SaveAppGroupButton.Content = live ? "保存为新组..." : "把所有已开 App 保存成组";
+            SaveAppGroupButton.ToolTip = live ? "把所有运行中的实例保存为一个新的组文件"
+                : "用同一程序的所有运行实例覆盖所选配置，包括隐藏到托盘的实例";
+            ShortcutMenuItem.IsEnabled = !live;
+            OpenFolderMenuItem.IsEnabled = !live;
+            RemoveGroupMenuItem.IsEnabled = !live;
+        }
+
+        // 读取所有运行中实例的快照；无响应的实例（例如旧版本）跳过并在标题中提示。
+        private async Task ShowLiveInstancesAsync(int? selectProcessId = null)
+        {
+            if (refreshingLive) return;
+            refreshingLive = true;
+            SetLiveMode(true);
+            displayedPath = null;
+            try
+            {
+                int? keep = selectProcessId ?? SelectedRow?.ProcessId;
+                var rows = new List<AppGroupRow>();
+                int failed = 0;
+                foreach (int id in AppGroups.GetInstanceProcessIds())
+                {
+                    try
+                    {
+                        var response = await InstanceService.RequestAsync(id, "snapshot");
+                        if (response.Entry != null) rows.Add(new AppGroupRow(response.Entry, rows.Count, id));
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        (Application.Current as App)?.WriteDiagnostic($"Live snapshot of instance {id} failed", ex);
+                    }
+                }
+                if (!isLiveView) return;
+                displayedAppGroup = new AppGroup { Name = "当前运行中", Apps = rows.Select(row => row.Entry).ToList() };
+                AppGroupGrid.ItemsSource = rows;
+                Title = $"App 组管理 - 当前运行中 · {rows.Count} 个实例" + (failed > 0 ? $"（{failed} 个无响应）" : string.Empty);
+                var selected = rows.FirstOrDefault(row => row.ProcessId == keep);
+                if (selected != null)
+                {
+                    AppGroupGrid.SelectedItem = selected;
+                    AppGroupGrid.ScrollIntoView(selected);
+                }
+            }
+            catch (Exception ex) { ShowAppGroupError(ex); }
+            finally { refreshingLive = false; }
+        }
+
+        private async void RefreshLive_Click(object sender, RoutedEventArgs e) => await ShowLiveInstancesAsync();
+
+        private void EnsureLiveHotkeyAvailable(AppGroupRow? row, string hotkey)
+        {
+            if (string.IsNullOrWhiteSpace(hotkey)) return;
+            GlobalHotKeyManager.ParseHotkey(hotkey, out uint modifiers, out uint key);
+            foreach (var other in (AppGroupGrid.ItemsSource as IEnumerable<AppGroupRow>) ?? Enumerable.Empty<AppGroupRow>())
+            {
+                if (other.ProcessId == row?.ProcessId || string.IsNullOrWhiteSpace(other.Entry.Hotkey)) continue;
+                try
+                {
+                    GlobalHotKeyManager.ParseHotkey(other.Entry.Hotkey, out uint otherModifiers, out uint otherKey);
+                    if (otherModifiers == modifiers && otherKey == key)
+                        throw new InvalidOperationException($"快捷键 {hotkey} 已被实例 {other.ProcessId} 使用。");
+                }
+                catch (ArgumentException) { }
+            }
+        }
+
+        private async Task ApplyLiveAsync(AppGroupRow row, AppGroupEntry replacement)
+        {
+            int processId = row.ProcessId ?? throw new InvalidOperationException("不是运行中的实例。");
+            EnsureLiveHotkeyAvailable(row, replacement.Hotkey);
+            SetAppGroupBusy(true);
+            try { await InstanceService.ApplyAsync(processId, replacement); }
+            finally { SetAppGroupBusy(false); }
+            await ShowLiveInstancesAsync(processId);
+        }
+
+        private async Task StartLiveInstanceAsync(AppGroupEntry entry)
+        {
+            EnsureLiveHotkeyAvailable(null, entry.Hotkey);
+            SetAppGroupBusy(true);
+            try
+            {
+                using var process = AppGroups.Start(entry, showWindow: true);
+                await AppGroups.WaitForInstanceAsync(process);
+                SetAppGroupBusy(false);
+                await ShowLiveInstancesAsync(process.Id);
+            }
+            finally { SetAppGroupBusy(false); }
+        }
+
         private void AppGroupFilesComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (updatingGroupFiles) return;
-            if (AppGroupFilesComboBox.SelectedItem is AppGroupFileOption { FilePath: null })
+            if (AppGroupFilesComboBox.SelectedItem is AppGroupFileOption { FilePath: null, IsLive: false })
             {
                 RestoreDisplayedSelection();
                 Dispatcher.BeginInvoke(new Action(CreateAppGroup));
                 return;
             }
-            try { ShowSelectedAppGroup(); }
+            try { ShowSelected(); }
             catch (Exception ex) { ShowAppGroupError(ex); }
         }
 
@@ -111,9 +239,19 @@ namespace TrayChrome
         {
             updatingGroupFiles = true;
             AppGroupFilesComboBox.SelectedItem = AppGroupFilesComboBox.Items.OfType<AppGroupFileOption>()
-                .FirstOrDefault(option => option.FilePath != null
+                .FirstOrDefault(option => isLiveView ? option.IsLive : option.FilePath != null
                     && string.Equals(option.FilePath, displayedPath, StringComparison.OrdinalIgnoreCase));
             updatingGroupFiles = false;
+        }
+
+        private static string NewGroupPath(string name)
+        {
+            name = name.Trim();
+            if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                throw new InvalidDataException("组名称不能为空，且不能包含文件名非法字符。");
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name + ".json");
+            if (File.Exists(path)) throw new IOException($"{Path.GetFileName(path)} 已存在。");
+            return path;
         }
 
         private void CreateAppGroup()
@@ -122,12 +260,8 @@ namespace TrayChrome
             if (name == null) return;
             try
             {
-                name = name.Trim();
-                if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-                    throw new InvalidDataException("组名称不能为空，且不能包含文件名非法字符。");
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name + ".json");
-                if (File.Exists(path)) throw new IOException($"{Path.GetFileName(path)} 已存在。");
-                AppGroups.Save(path, new AppGroup { Name = name });
+                string path = NewGroupPath(name);
+                AppGroups.Save(path, new AppGroup { Name = name.Trim() });
                 AppGroups.Remember(path);
                 InitializeAppGroups(path);
             }
@@ -171,6 +305,23 @@ namespace TrayChrome
 
         private async void SaveAppGroup_Click(object sender, RoutedEventArgs e)
         {
+            if (isLiveView)
+            {
+                string? name = PromptText("保存为新组", "组名称：", string.Empty);
+                if (name == null) return;
+                SetAppGroupBusy(true);
+                try
+                {
+                    string newPath = NewGroupPath(name);
+                    AppGroups.Save(newPath, await AppGroups.CaptureAsync(name.Trim()));
+                    AppGroups.Remember(newPath);
+                    InitializeAppGroups(selectLive: true);
+                    MessageBox.Show(this, $"已保存为 {Path.GetFileName(newPath)}", "保存 App 组", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex) { ShowAppGroupError(ex); }
+                finally { SetAppGroupBusy(false); }
+                return;
+            }
             string path = SelectedAppGroupPath ?? AppGroups.DefaultFile;
             if (File.Exists(path) && MessageBox.Show(this, "用当前所有运行中的 App 覆盖所选配置？包括隐藏到托盘的实例。", "保存 App 组",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
@@ -187,7 +338,7 @@ namespace TrayChrome
             finally { SetAppGroupBusy(false); }
         }
 
-        private void SaveAppGroupAs_Click(object sender, RoutedEventArgs e)
+        private async void SaveAppGroupAs_Click(object sender, RoutedEventArgs e)
         {
             if (displayedAppGroup == null)
             {
@@ -205,7 +356,11 @@ namespace TrayChrome
             if (dialog.ShowDialog(this) != true) return;
             try
             {
-                AppGroups.Save(dialog.FileName, displayedAppGroup);
+                // 运行中视图重新抓取完整快照，并去除重复快捷键。
+                var group = isLiveView
+                    ? await AppGroups.CaptureAsync(Path.GetFileNameWithoutExtension(dialog.FileName))
+                    : displayedAppGroup;
+                AppGroups.Save(dialog.FileName, group);
                 AppGroups.Remember(dialog.FileName);
                 InitializeAppGroups(dialog.FileName);
             }
@@ -273,6 +428,8 @@ namespace TrayChrome
         private void AppGroupGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
             bool hasRow = SelectedRow != null;
+            StartAppMenuItem.Header = isLiveView ? "显示窗口" : "启动";
+            DeleteAppMenuItem.Header = isLiveView ? "关闭实例" : "删除";
             StartAppMenuItem.IsEnabled = hasRow;
             EditAppMenuItem.IsEnabled = hasRow;
             IconAppMenuItem.IsEnabled = hasRow;
@@ -314,13 +471,38 @@ namespace TrayChrome
             if (SelectedRow is AppGroupRow row) DeleteRow(row);
         }
 
-        private void DeleteRow(AppGroupRow row)
+        private async void DeleteRow(AppGroupRow row)
         {
-            try { SaveEntry(row.Index, null); }
+            try
+            {
+                if (isLiveView) await CloseLiveInstanceAsync(row);
+                else SaveEntry(row.Index, null);
+            }
             catch (Exception ex) { ShowAppGroupError(ex); }
         }
 
-        private void ChangeAppGroupIcon_Click(object sender, RoutedEventArgs e)
+        private async Task CloseLiveInstanceAsync(AppGroupRow row)
+        {
+            int processId = row.ProcessId ?? throw new InvalidOperationException("不是运行中的实例。");
+            if (processId == Environment.ProcessId)
+            {
+                Application.Current.Shutdown();
+                return;
+            }
+            SetAppGroupBusy(true);
+            try
+            {
+                using var process = Process.GetProcessById(processId);
+                await InstanceService.RequestAsync(processId, "close");
+                using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+                try { await process.WaitForExitAsync(timeout.Token); }
+                catch (OperationCanceledException) { }
+            }
+            finally { SetAppGroupBusy(false); }
+            await ShowLiveInstancesAsync();
+        }
+
+        private async void ChangeAppGroupIcon_Click(object sender, RoutedEventArgs e)
         {
             if (SelectedRow is not AppGroupRow row) return;
             try
@@ -329,7 +511,8 @@ namespace TrayChrome
                 if (selectedIcon == null) return;
                 var replacement = CopyAppGroupEntry(row.Entry);
                 replacement.IconPath = selectedIcon;
-                SaveEntry(row.Index, replacement);
+                if (isLiveView) await ApplyLiveAsync(row, replacement);
+                else SaveEntry(row.Index, replacement);
             }
             catch (Exception ex) { ShowAppGroupError(ex); }
         }
@@ -378,6 +561,22 @@ namespace TrayChrome
         private async void StartAppGroupItem_Click(object sender, RoutedEventArgs e)
         {
             if (SelectedRow is not AppGroupRow row) return;
+            if (isLiveView)
+            {
+                try
+                {
+                    int processId = row.ProcessId ?? throw new InvalidOperationException("不是运行中的实例。");
+                    if (processId == Environment.ProcessId) ((App)Application.Current).ShowMainWindowFromRemote();
+                    else
+                    {
+                        // 允许目标实例把自己的窗口切到前台。
+                        AllowSetForegroundWindow(processId);
+                        await InstanceService.RequestAsync(processId, "show");
+                    }
+                }
+                catch (Exception ex) { ShowAppGroupError(ex); }
+                return;
+            }
             SetAppGroupBusy(true);
             try
             {
@@ -395,7 +594,7 @@ namespace TrayChrome
 
         private void AddAppGroupItem_Click(object sender, RoutedEventArgs e)
         {
-            if (displayedAppGroup == null)
+            if (displayedAppGroup == null && !isLiveView)
             {
                 ShowAppGroupError(new InvalidOperationException("请先选择或新建一个 App 组。"));
                 return;
@@ -430,9 +629,10 @@ namespace TrayChrome
             var source = row?.Entry ?? new AppGroupEntry();
             int index = row?.Index ?? -1;
             string? path = displayedPath;
+            bool live = isLiveView;
             var dialog = new Window
             {
-                Title = row == null ? "添加 App" : "编辑 App",
+                Title = live ? (row == null ? "启动新实例" : $"编辑运行中实例 {row.ProcessId}") : row == null ? "添加 App" : "编辑 App",
                 Owner = this,
                 Width = 520,
                 SizeToContent = SizeToContent.Height,
@@ -524,13 +724,13 @@ namespace TrayChrome
                 }
             };
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
-            var save = new Button { Content = "保存", IsDefault = false, MinWidth = 70 };
+            var save = new Button { Content = live ? (row == null ? "启动" : "应用") : "保存", IsDefault = false, MinWidth = 70 };
             var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 70, Margin = new Thickness(5, 0, 0, 0) };
-            save.Click += (s, args) =>
+            save.Click += async (s, args) =>
             {
                 try
                 {
-                    if (!string.Equals(path, displayedPath, StringComparison.OrdinalIgnoreCase))
+                    if (live != isLiveView || (!live && !string.Equals(path, displayedPath, StringComparison.OrdinalIgnoreCase)))
                         throw new InvalidOperationException("已切换到其他组，请重新打开编辑窗口。");
                     var urls = ParseUrls(urlBox.Text);
                     var replacement = CopyAppGroupEntry(source);
@@ -539,11 +739,18 @@ namespace TrayChrome
                     replacement.Hotkey = string.IsNullOrWhiteSpace(hotkeyBox.Text) ? string.Empty
                         : GlobalHotKeyManager.ParseHotkey(hotkeyBox.Text, out _, out _);
                     if (selectedIcon != null) replacement.IconPath = selectedIcon;
-                    SaveEntry(index, replacement);
+                    if (live)
+                    {
+                        save.IsEnabled = false;
+                        if (row == null) await StartLiveInstanceAsync(replacement);
+                        else await ApplyLiveAsync(row, replacement);
+                    }
+                    else SaveEntry(index, replacement);
                     dialog.Close();
                 }
                 catch (Exception ex)
                 {
+                    save.IsEnabled = true;
                     MessageBox.Show(dialog, $"保存 App 失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             };

@@ -281,6 +281,30 @@ namespace TrayChrome
 
         public List<string> CaptureTabUrls() => tabs.Select(tab => tab.View.CoreWebView2?.Source ?? tab.Url).ToList();
 
+        // 按「当前页 + 其他标签页」顺序对齐标签：同位置地址不同则导航，多出的新开，缺少的关闭。
+        public async Task ApplyTabUrlsAsync(IReadOnlyList<string> urls)
+        {
+            if (urls.Count == 0) throw new ArgumentException("至少需要一个网页。", nameof(urls));
+            if (tabInitializing) throw new InvalidOperationException("标签页正在初始化，请稍后再试。");
+            var current = activeTab;
+            var ordered = new[] { current }.Concat(tabs.Where(tab => tab != current)).ToList();
+            for (int i = 0; i < Math.Min(ordered.Count, urls.Count); i++)
+            {
+                var tab = ordered[i];
+                string source = tab.View.CoreWebView2?.Source ?? tab.Url;
+                if (string.Equals(source, urls[i], StringComparison.Ordinal)) continue;
+                tab.Url = urls[i];
+                tab.View.CoreWebView2?.Navigate(urls[i]);
+                if (tab == current && !(AddressBar.IsKeyboardFocused && addressBarEdited)) SetAddressBarText(urls[i]);
+            }
+            foreach (var tab in ordered.Skip(urls.Count)) CloseTab(tab);
+            foreach (string url in urls.Skip(ordered.Count))
+            {
+                await OpenTabAsync(url);
+                SelectTab(current);
+            }
+        }
+
         private void RefreshTabTitle(WebView2 view)
         {
             var tab = tabs.FirstOrDefault(item => item.View == view);

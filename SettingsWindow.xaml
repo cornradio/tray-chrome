@@ -80,7 +80,7 @@
             </TabItem>
             
             <!-- 外观设置 -->
-            <TabItem Header="外观设置">
+            <TabItem Header="外观设置" Name="AppearanceTab">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="10">
                         <GroupBox Header="主题">
@@ -105,7 +105,7 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="图标设置">
+                        <GroupBox Header="图标设置" Name="IconSettingsGroup">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>

@@ -72,6 +72,54 @@ namespace TrayChrome
             using var process = AppGroups.Start(entry, showWindow: true);
         }
 
+        // App 组管理「当前运行中」视图：把编辑后的配置直接应用到本实例（网页、快捷键、图标）。
+        public async Task ApplyLiveEntryAsync(AppGroupEntry entry)
+        {
+            if (mainWindow == null) throw new InvalidOperationException("主窗口尚未初始化。");
+            var urls = new[] { entry.Url }.Concat(entry.Tabs ?? new List<string>()).ToList();
+            if (urls.Any(url => !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)))
+                throw new InvalidDataException("网页必须是 HTTP 或 HTTPS 地址。");
+            string iconPath = string.IsNullOrWhiteSpace(entry.IconPath) ? IconSettings.DefaultPath : entry.IconPath;
+            IconSettings.ValidatePath(iconPath);
+            string hotkey = string.IsNullOrWhiteSpace(entry.Hotkey)
+                ? string.Empty : GlobalHotKeyManager.ParseHotkey(entry.Hotkey, out _, out _);
+
+            string currentHotkey = CaptureCurrentApp().Hotkey;
+            if (!string.Equals(hotkey, currentHotkey, StringComparison.OrdinalIgnoreCase) || hotKeyManager == null)
+            {
+                string? previousInstanceHotkey = instanceHotkey;
+                hotKeyManager?.Dispose();
+                hotKeyManager = null;
+                instanceHotkey = hotkey;
+                if (hotkey.Length > 0 && !hotKeysSuspended)
+                {
+                    GlobalHotKeyManager.ParseHotkey(hotkey, out uint modifiers, out uint key);
+                    var manager = new GlobalHotKeyManager(mainWindow);
+                    if (!manager.RegisterHotKey(modifiers, key, ToggleMainWindow))
+                    {
+                        manager.Dispose();
+                        instanceHotkey = previousInstanceHotkey;
+                        InitializeGlobalHotKey();
+                        throw new InvalidOperationException($"快捷键 {hotkey} 已被其他程序或实例占用。");
+                    }
+                    hotKeyManager = manager;
+                }
+            }
+
+            if (!string.Equals(iconPath, currentIconPath, StringComparison.OrdinalIgnoreCase))
+                SetApplicationIcon(iconPath);
+            await mainWindow.ApplyTabUrlsAsync(urls);
+        }
+
+        public void ShowMainWindowFromRemote()
+        {
+            if (mainWindow == null) return;
+            if (!mainWindow.IsVisible) mainWindow.ShowWithAnimation();
+            mainWindow.WindowState = WindowState.Normal;
+            mainWindow.Activate();
+        }
+
         public void RestartCurrentInstance()
         {
             using var process = AppGroups.Start(CaptureCurrentApp(), showWindow: true);

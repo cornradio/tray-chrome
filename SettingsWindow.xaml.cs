@@ -258,6 +258,13 @@ namespace TrayChrome
             }
         }
 
+        public void ShowIconSection()
+        {
+            AppearanceTab.IsSelected = true;
+            Dispatcher.BeginInvoke(new Action(() => IconSettingsGroup.BringIntoView()),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
         private void CustomIconButton_Click(object sender, RoutedEventArgs e)
         {
             try

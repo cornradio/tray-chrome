@@ -16,9 +16,11 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <DockPanel Grid.Row="0" Name="AppGroupFileBar">
-            <Button DockPanel.Dock="Right" Content="加载组" Click="LoadAppGroup_Click"
+            <Button DockPanel.Dock="Right" Name="LoadAppGroupButton" Content="加载组" Click="LoadAppGroup_Click"
                     ToolTip="释放当前实例快捷键后启动组内实例到托盘，成功后关闭当前实例"
                     Background="#218838" Foreground="White" FontWeight="SemiBold" MinWidth="90"/>
+            <Button DockPanel.Dock="Right" Name="RefreshLiveButton" Content="刷新" Click="RefreshLive_Click"
+                    ToolTip="重新读取所有运行中实例的状态" Visibility="Collapsed"/>
             <ComboBox Name="AppGroupFilesComboBox" Margin="5" VerticalContentAlignment="Center"
                       SelectionChanged="AppGroupFilesComboBox_SelectionChanged">
                 <ComboBox.ItemTemplate>
@@ -30,17 +32,17 @@
         </DockPanel>
         <WrapPanel Grid.Row="1" Name="AppGroupActions">
             <Button Content="添加 App" Click="AddAppGroupItem_Click"/>
-            <Button Content="把所有已开 App 保存成组" Click="SaveAppGroup_Click"
+            <Button Name="SaveAppGroupButton" Content="把所有已开 App 保存成组" Click="SaveAppGroup_Click"
                     ToolTip="用同一程序的所有运行实例覆盖所选配置，包括隐藏到托盘的实例"/>
             <Menu Background="Transparent" VerticalAlignment="Center" Margin="5">
                 <MenuItem Header="更多" Padding="10,5">
                     <MenuItem Header="导入组文件..." Click="ImportAppGroup_Click"/>
                     <MenuItem Header="当前配置另存为..." Click="SaveAppGroupAs_Click"/>
-                    <MenuItem Header="创建桌面快捷方式" Click="CreateAppGroupShortcut_Click"
+                    <MenuItem Header="创建桌面快捷方式" Name="ShortcutMenuItem" Click="CreateAppGroupShortcut_Click"
                               ToolTip="创建所选组的桌面快捷方式；打开时保留原有实例"/>
-                    <MenuItem Header="在资源管理器中打开" Click="OpenAppGroupFolder_Click"/>
+                    <MenuItem Header="在资源管理器中打开" Name="OpenFolderMenuItem" Click="OpenAppGroupFolder_Click"/>
                     <Separator/>
-                    <MenuItem Header="移除配置" Click="RemoveAppGroup_Click"
+                    <MenuItem Header="移除配置" Name="RemoveGroupMenuItem" Click="RemoveAppGroup_Click"
                               ToolTip="直接删除所选 JSON 配置文件，不再确认"/>
                 </MenuItem>
             </Menu>
@@ -78,6 +80,8 @@
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="网页" Binding="{Binding Urls}" Width="*"/>
                 <DataGridTextColumn Header="快捷键" Binding="{Binding Hotkey}" Width="120"/>
+                <DataGridTextColumn x:Name="InstanceColumn" Header="实例" Binding="{Binding InstanceLabel}" Width="110"
+                                    Visibility="Collapsed"/>
             </DataGrid.Columns>
         </DataGrid>
     </Grid>

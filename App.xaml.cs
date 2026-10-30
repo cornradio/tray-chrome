@@ -273,6 +273,8 @@ namespace TrayChrome
             }
             else
             {
+                // 不显示窗口也要完成一次宿主初始化：WebView2 需要它才能加载，设置等子窗口也需要可用的 Owner。
+                mainWindow.PrepareHiddenWindow();
                 mainWindow.Hide();
             }
             
@@ -293,7 +295,7 @@ namespace TrayChrome
             InitializeGlobalHotKey();
             InitializeSettingsWatcher();
             instanceService = new InstanceService(CaptureCurrentApp,
-                () => mainWindow.TabsReady, () => Shutdown());
+                () => mainWindow.TabsReady, () => Shutdown(), ApplyLiveEntryAsync, ShowMainWindowFromRemote);
             instanceService.Start();
             
             // 隐藏主窗口，只显示托盘图标
@@ -427,20 +429,19 @@ namespace TrayChrome
             }
         }
 
-        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        private void OpenSettings_Click(object sender, RoutedEventArgs e) => OpenSettings();
+
+        private void OpenSettings(bool showIconSection = false)
         {
             try
             {
                 if (mainWindow != null)
                 {
                     // 确保主窗口已经显示过（即使现在是隐藏的），这样才能设置Owner
-                    if (!mainWindow.IsLoaded)
-                    {
-                        mainWindow.Show();
-                        mainWindow.Hide();
-                    }
+                    if (!mainWindow.IsLoaded) mainWindow.PrepareHiddenWindow();
                     
                     var settingsWindow = new SettingsWindow(appSettings, mainWindow, this);
+                    if (showIconSection) settingsWindow.ShowIconSection();
                     // 订阅窗口关闭事件，在关闭时更新设置
                     settingsWindow.Closed += (s, args) =>
                     {
@@ -574,36 +575,12 @@ namespace TrayChrome
             }
         }
 
-        private async void SetCustomIcon_Click(object sender, RoutedEventArgs e)
+        // 托盘「自定义图标...」跳到设置里的图标区域，可选内置图标或自定义图片。
+        private void SetCustomIcon_Click(object sender, RoutedEventArgs e)
         {
-            if (isSelectingCustomIcon) return;
-            isSelectingCustomIcon = true;
-            try
-            {
-                WriteDiagnostic("Custom icon: closing tray context menu");
-                if (trayIcon?.ContextMenu != null) trayIcon.ContextMenu.IsOpen = false;
-                // 等托盘菜单的原生消息回调返回，再进入文件选择框的模态消息循环。
-                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-                string targetPath = IconSettings.SelectAndImport(mainWindow?.IsVisible == true ? mainWindow : null);
-                if (targetPath != null)
-                {
-                    WriteDiagnostic("Custom icon: applying imported image");
-                    SetApplicationIcon(targetPath);
-                    SaveIconSetting("custom", targetPath);
-                    WriteDiagnostic("Custom icon: saved");
-                    
-                    MessageBox.Show("自定义图标设置成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                WriteDiagnostic("Set custom icon failed", ex);
-                MessageBox.Show($"设置自定义图标失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally { isSelectingCustomIcon = false; }
+            if (trayIcon?.ContextMenu != null) trayIcon.ContextMenu.IsOpen = false;
+            OpenSettings(showIconSection: true);
         }
-
-        private bool isSelectingCustomIcon;
 
         public void SetApplicationIcon(string iconPath)
         {

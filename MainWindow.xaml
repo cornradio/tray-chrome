@@ -13,7 +13,7 @@
         Topmost="True"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="Transparent"
+        Background="#01000000"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewKeyUp="Window_PreviewKeyUp"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
