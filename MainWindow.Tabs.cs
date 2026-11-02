@@ -46,10 +46,10 @@ namespace TrayChrome
 
         private void ApplyTabSettings()
         {
+            ApplyBrowserZoom();
             foreach (var tab in tabs)
             {
                 if (tab.View.CoreWebView2 == null) continue;
-                tab.View.ZoomFactor = currentZoomFactor;
                 tab.View.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
                 tab.Blocker.BlockRules = adBlocker.BlockRules;
                 tab.Blocker.AllowRules = adBlocker.AllowRules;
@@ -57,8 +57,14 @@ namespace TrayChrome
             }
         }
 
+        private void ApplyBrowserZoom()
+        {
+            foreach (var tab in tabs) tab.View.ZoomFactor = currentZoomFactor;
+        }
+
         private void RegisterTab(WebView2 view, string url)
         {
+            view.ZoomFactor = currentZoomFactor;
             view.SizeChanged += (_, _) =>
                 Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
             var tab = new BrowserTab { View = view, Url = url };
@@ -196,7 +202,6 @@ namespace TrayChrome
             UpdateTabTheme(isDarkMode);
             if (webView.CoreWebView2 != null)
             {
-                webView.ZoomFactor = currentZoomFactor;
                 webView.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
                 UpdateTrayTooltip();
                 UpdateBrowserDrag();
@@ -226,7 +231,7 @@ namespace TrayChrome
                 MessageBox.Show("标签页正在初始化，请稍后再试。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var view = new WebView2();
+            var view = new WebView2 { ZoomFactor = currentZoomFactor };
             BrowserHost.Children.Add(view);
             RegisterTab(view, url);
             var tab = tabs.Last();

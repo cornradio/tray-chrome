@@ -282,6 +282,7 @@ namespace TrayChrome
             var view = webView;
             try
             {
+                // 让 WPF 在创建浏览器控制器时就应用实例的默认缩放。
                 // 检查 WebView2 是否已经初始化
                 if (webView.CoreWebView2 != null)
                 {
@@ -309,9 +310,6 @@ namespace TrayChrome
                 settings.IsGeneralAutofillEnabled = false;
                 settings.IsPasswordAutosaveEnabled = false;
                 
-                // 应用缩放设置
-                webView.ZoomFactor = currentZoomFactor;
-                
                 // 初始化时设置浏览器外观模式
                 ApplyBrowserAppearance(isDarkMode);
                 // 应用UI外观
@@ -320,6 +318,7 @@ namespace TrayChrome
                 // 监听导航事件
                 webView.CoreWebView2.NavigationStarting += (s, e) =>
                 {
+                    view.ZoomFactor = currentZoomFactor;
                     UserScriptNavigationStarting(view, e);
                     if (view == webView) CoreWebView2_NavigationStarting(s, e);
                 };
@@ -1888,14 +1887,14 @@ namespace TrayChrome
         {
             currentZoomFactor += 0.1;
             if (currentZoomFactor > 3.0) currentZoomFactor = 3.0;
-            webView.ZoomFactor = currentZoomFactor;
+            ApplyBrowserZoom();
         }
         
         private void ZoomOut_Click(object sender, RoutedEventArgs e)
         {
             currentZoomFactor -= 0.1;
             if (currentZoomFactor < 0.3) currentZoomFactor = 0.3;
-            webView.ZoomFactor = currentZoomFactor;
+            ApplyBrowserZoom();
         }
         
         private void HamburgerMenu_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -2357,10 +2356,7 @@ namespace TrayChrome
                 // 应用缩放
                 currentZoomFactor = settings.ZoomFactor;
 
-                if (webView?.CoreWebView2 != null)
-                {
-                    webView.ZoomFactor = currentZoomFactor;
-                }
+                ApplyBrowserZoom();
                 
                 // 应用UA
                 isMobileUA = settings.IsMobileUA;
