@@ -30,6 +30,7 @@
                             <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                                 <DockPanel>
                                     <TextBlock Name="SubmenuArrow" Text="›" DockPanel.Dock="Right" Margin="12,0,0,0" Visibility="Collapsed"/>
+                                    <TextBlock Name="MenuCheck" Text="✓" Margin="0,0,6,0" Visibility="Collapsed"/>
                                     <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
                                 </DockPanel>
                             </Border>
@@ -52,6 +53,9 @@
                             </Trigger>
                             <Trigger Property="HasItems" Value="True">
                                 <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="MenuCheck" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -164,7 +168,9 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="35"/>
+                    <ColumnDefinition Width="28"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="35"/>
                 </Grid.ColumnDefinitions>
                 
@@ -178,7 +184,15 @@
                        VerticalContentAlignment="Center"/>
                 
                 <!-- 地址栏 -->
-                <TextBox Grid.Column="1" Name="AddressBar" 
+                <Button Grid.Column="1" Name="SearchButton"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="SearchButton_Click"
+                        ToolTip="页内搜索 (Ctrl+F)">
+                    <Path Width="14" Height="14" Stretch="Uniform"
+                          Stroke="{Binding Foreground, ElementName=SearchButton}" StrokeThickness="1.5"
+                          Data="M 9,5 A 4,4 0 1 1 1,5 A 4,4 0 1 1 9,5 M 8,8 L 13,13"/>
+                </Button>
+
+                <TextBox Grid.Column="2" Name="AddressBar"
                          Background="#444" Foreground="#FFFFFF" 
                          BorderThickness="0" BorderBrush="#888"
                          Margin="0,3,5,3" Padding="8,5" 
@@ -191,7 +205,9 @@
                          VerticalContentAlignment="Center"/>
 
                 <!-- 关闭按钮 -->
-                <Button Grid.Column="2" Name="CloseButton" Content="×"
+                <Button Grid.Column="3" Name="TopMoreButton" Content="…" Width="30" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="MoreButton_Click" ToolTip="更多"/>
+                <Button Grid.Column="4" Name="CloseButton" Content="×"
                         Style="{StaticResource ToolbarButtonStyle}" Click="CloseButton_Click"/>
             </Grid>
         </Border>
@@ -205,7 +221,7 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <DockPanel Name="TabToolbar" Background="{Binding Background, ElementName=TopToolbar}"
-                       Visibility="Collapsed">
+                       Visibility="Collapsed" PreviewMouseWheel="TabToolbar_PreviewMouseWheel">
                 <Button Name="NewTabButton" DockPanel.Dock="Right" Content="+"
                         ToolTip="新标签页 (Ctrl+T)" Click="NewTab_Click" Width="28"
                         Style="{StaticResource TabHeaderStyle}"/>
@@ -263,12 +279,8 @@
         
         <!-- 底部功能按钮栏 -->
         <Border Grid.Row="2" Name="BottomToolbar" Background="#3C3C3C" BorderBrush="#555" BorderThickness="0,1,0,0">
-            <Grid Margin="5">
+            <Grid Name="BottomToolbarGrid" Margin="5">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="30"/>
@@ -310,66 +322,94 @@
                     </Button.ContextMenu>
                 </Button>
                 
-                <!-- UA切换按钮 -->
-                <Button Grid.Column="6" Name="UAButton" Content="▯" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="UAButton_Click"
-                        ToolTip="切换用户代理 (当前: 手机)"/>
-                <!-- Popup按钮 -->
-                <Button Grid.Column="5" Name="PopupButton" Content="⫘" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click"
-                        ToolTip="在新标签页打开"/>
-                    <!-- 日夜模式切换按钮 -->
-                <Button Grid.Column="4" Name="DarkModeButton" Content="☾" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="DarkModeButton_Click"
-                        ToolTip="切换暗色模式"/>
-
-                <!-- 代理按钮 -->
-                <Button Grid.Column="7" Name="ProxyButton" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="ProxyButton_Click"
-                        ToolTip="代理设置">
-                    <Button.Content>
-                        <Grid Width="14" Height="14">
-                            <Ellipse Name="ProxyRing" Stroke="White" StrokeThickness="2" Fill="Transparent"/>
-                        </Grid>
-                    </Button.Content>
+                <Button Name="SettingsButton" Content="⚙"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="SettingsButton_Click"
+                        ToolTip="设置 (Ctrl+,)"/>
+                <Button Grid.Column="6" Name="MoreButton" Content="…"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="MoreButton_Click" ToolTip="更多">
                     <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="开启/关闭代理" Click="ProxyToggle_Click" IsCheckable="True" Name="ProxyToggleMenuItem2"/>
-                            <MenuItem Header="代理设置页面" Click="ProxySettings_Click"/>
-                            <MenuItem Header="重启实例 (生效Proxy)" Click="RestartApp_Click"/>
+                        <ContextMenu Name="MoreContextMenu" Style="{StaticResource BrowserContextMenuStyle}"
+                                     Opened="MoreContextMenu_Opened">
+                            <MenuItem Name="BackMenuItem" Header="后退" Click="BackButton_Click"/>
+                            <MenuItem Name="ForwardMenuItem" Header="前进" Click="ForwardButton_Click"/>
+                            <MenuItem Name="RefreshMenuItem" Header="刷新" Click="RefreshButton_Click"/>
+                            <MenuItem Name="BookmarkMenuItem" Header="收藏夹" Click="ToolbarBookmarks_Click"/>
+                            <MenuItem Name="PinMenuItem" Header="窗口置顶" IsCheckable="True" Click="TopMostButton_Click"/>
+                            <MenuItem Name="ZoomMenuItem" Header="缩放" Click="ZoomButton_Click"/>
+                            <MenuItem Name="OpenBrowserMenuItem" Header="用默认浏览器打开" Click="PopupButton_Click"/>
+                            <MenuItem Name="UserAgentMenuItem" Header="手机 UA" IsCheckable="True" Click="UAButton_Click"/>
+                            <MenuItem Name="DarkModeMenuItem" Header="暗色模式" IsCheckable="True" Click="DarkModeButton_Click"/>
+                            <MenuItem Name="ProxyMenuItem" Header="代理">
+                                <MenuItem Header="启用代理" Click="ProxyToggle_Click" IsCheckable="True" Name="ProxyToggleMenuItem2"/>
+                                <MenuItem Header="代理设置" Click="ProxySettings_Click"/>
+                                <MenuItem Header="重启实例（使代理生效）" Click="RestartApp_Click"/>
+                            </MenuItem>
+                            <MenuItem Name="SettingsMenuItem" Header="设置 (Ctrl+,)" Click="SettingsButton_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
 
                 <!-- 置顶按钮 -->
-                <Button Grid.Column="8" Name="TopMostButton"
+                <Button Grid.Column="4" Name="TopMostButton"
                         Style="{StaticResource ToolbarButtonStyle}" Click="TopMostButton_Click"
                         ToolTip="取消置顶">
-                    <Path Width="13" Height="15" Stretch="Uniform"
+                    <Path Width="10" Height="11" Stretch="Uniform"
                           Fill="{Binding Foreground, ElementName=TopMostButton}"
                           Data="M 4,0 L 10,0 L 9,6 L 12,9 L 12,10 L 7.7,10 L 7,15 L 6.3,10 L 2,10 L 2,9 L 5,6 Z"/>
                 </Button>
+                <Button Name="OpenBrowserButton" Content="↗" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click" ToolTip="用默认浏览器打开"/>
+                <Button Name="UserAgentButton" Content="UA" FontSize="10" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="UAButton_Click" ToolTip="切换手机 / 桌面 UA"/>
+                <Button Name="ThemeButton" Content="☾" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="DarkModeButton_Click" ToolTip="切换黑白模式"/>
+                <Button Name="ProxyButton" Content="◎" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="ToolbarProxy_Click" ToolTip="代理">
+                    <Button.ContextMenu>
+                        <ContextMenu Style="{StaticResource BrowserContextMenuStyle}" Opened="ToolbarProxyMenu_Opened">
+                            <MenuItem Name="ToolbarProxyToggle" Header="启用代理" IsCheckable="True" Click="ProxyToggle_Click"/>
+                            <MenuItem Header="代理设置" Click="ProxySettings_Click"/>
+                            <MenuItem Header="重启实例（使代理生效）" Click="RestartApp_Click"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                         
                 <!-- 拖动按钮 -->
-                <Label Grid.Column="11" Name="DragButton" Content="" 
+                <Label Grid.Column="7" Name="DragButton" Content=""
                        Background="Transparent" Foreground="White"
                        FontSize="16" Cursor="SizeAll"
                        HorizontalContentAlignment="Center"
                        VerticalContentAlignment="Center"
                        ToolTip="拖拽移动窗口"/>
                        
-                <!-- 缩小按钮 -->
-                <Button Grid.Column="9" Name="ZoomOutButton" Content="-" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="ZoomOut_Click"
-                        ToolTip="缩小"/>
-                <!-- 放大按钮 -->
-                <Button Grid.Column="10" Name="ZoomInButton" Content="+" 
-                        Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click"
-                        ToolTip="放大"/>
+                <Button Grid.Column="5" Name="ZoomButton" Content="80%" FontSize="10"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="ZoomButton_Click"
+                        ToolTip="调整缩放比例"/>
+                <Popup Name="ZoomPopup" PlacementTarget="{Binding ElementName=ZoomButton}"
+                       Placement="Top" StaysOpen="False" AllowsTransparency="True">
+                    <Border Background="{Binding Background, ElementName=BottomToolbar}"
+                            BorderBrush="{Binding BorderBrush, ElementName=BottomToolbar}"
+                            BorderThickness="1" CornerRadius="6" Padding="8">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Name="ZoomOutButton" Content="-" Width="28"
+                                    Style="{StaticResource ToolbarButtonStyle}" Click="ZoomOut_Click" ToolTip="缩小"/>
+                            <TextBox Name="ZoomPercentInput" Width="60" Padding="4" VerticalContentAlignment="Center"
+                                     Background="{Binding Background, ElementName=AddressBar}"
+                                     Foreground="{Binding Foreground, ElementName=AddressBar}"
+                                     BorderBrush="{Binding BorderBrush, ElementName=BottomToolbar}"
+                                     KeyDown="ZoomPercentInput_KeyDown" LostKeyboardFocus="ZoomPercentInput_LostKeyboardFocus"
+                                     ToolTip="输入 30–300，按 Enter 应用"/>
+                            <TextBlock Text="%" VerticalAlignment="Center" Margin="4,0"
+                                       Foreground="{Binding Foreground, ElementName=AddressBar}"/>
+                            <Button Name="ZoomInButton" Content="+" Width="28"
+                                    Style="{StaticResource ToolbarButtonStyle}" Click="ZoomIn_Click" ToolTip="放大"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
 
                 
                 <!-- 窗口调整按钮 ↘ -->
-                <Label Grid.Column="12" Name="ResizeButton" Content="" 
+                <Label Grid.Column="8" Name="ResizeButton" Content=""
                        Background="Transparent" Foreground="White"
                        FontSize="16" Cursor="SizeNWSE"
                        HorizontalContentAlignment="Center"

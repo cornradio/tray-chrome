@@ -18,6 +18,7 @@ namespace TrayChrome
 
         public BookmarkManagerWindow(App app, MainWindow? mainWindow)
         {
+            AppTheme.EnsureInitialized();
             InitializeComponent();
             this.app = app;
             this.mainWindow = mainWindow;

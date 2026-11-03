@@ -96,6 +96,7 @@ namespace TrayChrome
 
         public MainWindow(string? startupUrl = null, bool useCleanMode = false, bool forceUncleanMode = false, double? customWidth = null, double? customHeight = null, List<string> startupTabs = null)
         {
+            AppTheme.EnsureInitialized();
             InitializeComponent();
             LoadSettings();
             
@@ -123,7 +124,7 @@ namespace TrayChrome
                 isSuperMinimalMode = true;
             }
             
-            if (!string.IsNullOrWhiteSpace(startupUrl)) AddressBar.Text = startupUrl;
+            AddressBar.Text = string.IsNullOrWhiteSpace(startupUrl) ? appSettings.HomePage : startupUrl;
             RegisterTab(webView, AddressBar.Text);
             InitializeWebView(startupUrl, startupTabs);
             LoadBookmarks();
@@ -176,6 +177,7 @@ namespace TrayChrome
             // 应用UI外观
             UpdateUIAppearance(isDarkMode);
 
+            ApplyToolbarLayout();
             // 应用圆角设置（随窗口尺寸变化重新裁剪）
             MainContentGrid.SizeChanged += (s, e) => ApplyRoundedCorners();
             ApplyRoundedCorners();
@@ -190,6 +192,7 @@ namespace TrayChrome
         {
             if (Keyboard.Modifiers == ModifierKeys.Control)
             {
+                if (e.Key == Key.OemComma) { e.Handled = true; (Application.Current as App)?.OpenSettings(); return; }
                 if (e.Key == Key.T) { e.Handled = true; NewTab_Click(this, new RoutedEventArgs()); return; }
                 if (e.Key == Key.W) { e.Handled = true; CloseTab(activeTab); return; }
                 if (e.Key == Key.F) { e.Handled = true; ShowFindBar(); return; }
@@ -267,7 +270,11 @@ namespace TrayChrome
 
         private async void InitializeWebView(string? startupUrl = null, List<string> startupTabs = null)
         {
-            await InitializeWebViewInternal(startupUrl);
+            if (!await InitializeWebViewInternal(startupUrl))
+            {
+                startupTabsRestoring = false;
+                return;
+            }
             var first = activeTab;
             if (startupTabs != null)
                 foreach (string url in startupTabs) await OpenTabAsync(url);
@@ -276,7 +283,7 @@ namespace TrayChrome
             startupTabsRestoring = false;
         }
 
-        private async Task InitializeWebViewInternal(string? startupUrl = null)
+        private async Task<bool> InitializeWebViewInternal(string? startupUrl = null)
         {
             tabInitializing = true;
             var view = webView;
@@ -292,7 +299,8 @@ namespace TrayChrome
                 else
                 {
                     // 委托给专门的 Helper 类处理环境创建及 0x8007139F 错误的回退连接
-                    await WebView2EnvironmentHelper.EnsureCoreWebView2WithFallbackAsync(webView, appSettings);
+                    await InitializeTabBrowserAsync(tabs.Single(tab => tab.View == view));
+                    view = webView;
                 }
                 
                 // 优化WebView2设置以减少内存占用
@@ -358,6 +366,7 @@ namespace TrayChrome
                 await ApplyUserScriptsAsync(tabs.Single(tab => tab.View == view));
                 
                 // 初始化广告拦截器（在 CoreWebView2 准备好后）
+                InitializeStartPage(view);
                 InitializeAdBlocker();
                 
                 // 监听右键菜单请求
@@ -367,16 +376,18 @@ namespace TrayChrome
                 // 导航到启动URL或默认URL
                 string urlToNavigate = !string.IsNullOrEmpty(startupUrl) 
                     ? startupUrl 
-                    : "https://tva.cornradio.org/?name=search";
+                    : appSettings.HomePage;
                 
                 webView.CoreWebView2.Navigate(urlToNavigate);
                 if (!(AddressBar.IsKeyboardFocused && addressBarEdited)) SetAddressBarText(urlToNavigate);
                 _ = Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
+                return true;
             }
             catch (Exception ex)
             {
                 (Application.Current as App)?.WriteDiagnostic("WebView2 initialization failed", ex);
                 MessageBox.Show($"WebView2初始化失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
             }
             finally { tabInitializing = false; }
         }
@@ -779,15 +790,15 @@ namespace TrayChrome
          
          private void UpdateDarkModeButtonAppearance()
          {
-             if (DarkModeButton != null)
+             if (DarkModeMenuItem != null)
              {
-                 DarkModeButton.Content = isDarkMode ? "⏾" : "☼";
-                 DarkModeButton.ToolTip = isDarkMode ? "切换到亮色模式" : "切换到暗色模式";
+                 DarkModeMenuItem.IsChecked = isDarkMode;
              }
          }
          
          private void UpdateUIAppearance(bool darkMode)
          {
+             AppTheme.SetDarkMode(darkMode);
              UpdateTabTheme(darkMode);
              try
              {
@@ -831,12 +842,6 @@ namespace TrayChrome
                          ResizeButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
                      }
                      
-                     if (ProxyRing != null)
-                     {
-                         ProxyRing.Stroke = appSettings.IsProxyEnabled 
-                             ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x87, 0xCE, 0xFA)) 
-                             : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
-                     }
                  }
                  else
                  {
@@ -874,12 +879,6 @@ namespace TrayChrome
                          ResizeButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
                      }
                      
-                     if (ProxyRing != null)
-                     {
-                         ProxyRing.Stroke = appSettings.IsProxyEnabled 
-                             ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x87, 0xCE, 0xFA)) 
-                             : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
-                     }
                  }
                  
                  // 更新所有工具栏按钮的颜色
@@ -899,7 +898,8 @@ namespace TrayChrome
                  var buttons = new[]
                  {
                      CloseButton, BackButton, ForwardButton, RefreshButton, BookmarkButton,
-                     DarkModeButton, PopupButton, UAButton, TopMostButton, ZoomOutButton, ZoomInButton, ProxyButton
+                     MoreButton, TopMoreButton, SettingsButton, TopMostButton, SearchButton, ZoomButton, ZoomOutButton, ZoomInButton,
+                     OpenBrowserButton, UserAgentButton, ThemeButton, ProxyButton
                  };
                  
                  // 创建新的样式，根据暗色/亮色模式设置不同的悬停和按下颜色
@@ -1194,6 +1194,8 @@ namespace TrayChrome
         private void BookmarkButton_Click(object sender, RoutedEventArgs e)
         {
             // 显示右键菜单
+            BookmarkContextMenu.PlacementTarget = BookmarkButton;
+            BookmarkContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
             BookmarkContextMenu.IsOpen = true;
         }
 
@@ -1601,15 +1603,13 @@ namespace TrayChrome
             (Application.Current as App)?.OpenBookmarkManager();
         }
 
-        private void ProxyButton_Click(object sender, RoutedEventArgs e)
+        private void MoreButton_Click(object sender, RoutedEventArgs e)
         {
-            if (ProxyButton.ContextMenu != null)
-            {
-                ProxyButton.ContextMenu.PlacementTarget = ProxyButton;
-                ProxyButton.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-                ProxyToggleMenuItem2.IsChecked = appSettings.IsProxyEnabled;
-                ProxyButton.ContextMenu.IsOpen = true;
-            }
+            MoreContextMenu.PlacementTarget = VisibleMoreButton;
+            MoreContextMenu.Placement = VisibleMoreButton == TopMoreButton
+                ? System.Windows.Controls.Primitives.PlacementMode.Bottom
+                : System.Windows.Controls.Primitives.PlacementMode.Top;
+            MoreContextMenu.IsOpen = true;
         }
 
         private void RestartApp_Click(object sender, RoutedEventArgs e)
@@ -1868,14 +1868,10 @@ namespace TrayChrome
                 if (isMobileUA)
                 {
                     webView.CoreWebView2.Settings.UserAgent = MobileUA;
-                    UAButton.Content = "▯";
-                    UAButton.ToolTip = "切换用户代理 (当前: 手机)";
                 }
                 else
                 {
                     webView.CoreWebView2.Settings.UserAgent = DesktopUA;
-                    UAButton.Content = "🖳";
-                    UAButton.ToolTip = "切换用户代理 (当前: 桌面)";
                 }
                 
                 // 刷新当前页面以应用新的用户代理
@@ -1885,16 +1881,12 @@ namespace TrayChrome
         
         private void ZoomIn_Click(object sender, RoutedEventArgs e)
         {
-            currentZoomFactor += 0.1;
-            if (currentZoomFactor > 3.0) currentZoomFactor = 3.0;
-            ApplyBrowserZoom();
+            SetBrowserZoom(Math.Min(3.0, Math.Round(currentZoomFactor + 0.1, 2)));
         }
         
         private void ZoomOut_Click(object sender, RoutedEventArgs e)
         {
-            currentZoomFactor -= 0.1;
-            if (currentZoomFactor < 0.3) currentZoomFactor = 0.3;
-            ApplyBrowserZoom();
+            SetBrowserZoom(Math.Max(0.3, Math.Round(currentZoomFactor - 0.1, 2)));
         }
         
         private void HamburgerMenu_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -2114,6 +2106,8 @@ namespace TrayChrome
                 }
             }
 
+            UpdateToolbarVisibility();
+
             // 等待布局完成，以新的内容尺寸裁剪圆角。
             Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
 
@@ -2301,7 +2295,11 @@ namespace TrayChrome
                     parent.Children.Insert(index, webView);
                     
                     // 7. 重新初始化
-                    await InitializeWebViewInternal(activeTab.Url);
+                    if (!await InitializeWebViewInternal(activeTab.Url))
+                    {
+                        StartMemoryCleanupTimer();
+                        return;
+                    }
                     
                     // 8. 重新初始化广告拦截器
                     InitializeAdBlocker();
@@ -2363,8 +2361,6 @@ namespace TrayChrome
                 if (webView?.CoreWebView2 != null)
                 {
                     webView.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
-                    UAButton.Content = isMobileUA ? "▯" : "🖳";
-                    UAButton.ToolTip = isMobileUA ? "切换用户代理 (当前: 手机)" : "切换用户代理 (当前: 桌面)";
                 }
                 
                 // 应用暗色模式
@@ -2411,6 +2407,9 @@ namespace TrayChrome
                 // 应用圆角设置
                 appSettings.EnableRoundedCorners = settings.EnableRoundedCorners;
                 appSettings.CornerRadiusPx = settings.CornerRadiusPx;
+                appSettings.HomePage = settings.HomePage;
+                appSettings.BottomToolbarItems = new List<string>(settings.BottomToolbarItems ?? ToolbarLayout.DefaultItems);
+                ApplyToolbarLayout();
                 ApplyRoundedCorners();
 
                 // 保存设置
@@ -2590,6 +2589,8 @@ namespace TrayChrome
         }
 
         public double ZoomFactor { get; set; } = 0.8;
+        public List<string> BottomToolbarItems { get; set; } = new List<string>(ToolbarLayout.DefaultItems);
+        public string HomePage { get; set; } = StartPage.Url;
         public bool IsMobileUA { get; set; } = true;
         public double WindowWidth { get; set; } = 360;
         public double WindowHeight { get; set; } = 640;

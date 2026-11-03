@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action https: http:">
+  <title>TrayChrome</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+    main { width: min(90%, 520px); }
+    h1 { font-size: 24px; font-weight: 500; }
+    form { display: grid; gap: 10px; }
+    input, select, button { font: inherit; padding: 10px; border: 1px solid #8886; border-radius: 6px; }
+    button { cursor: pointer; }
+    a { color: #1689ef; }
+    footer { margin-top: 24px; font-size: 13px; }
+    #error { color: #e64c4c; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>TrayChrome</h1>
+  <form id="search">
+    <input id="query" aria-label="搜索或输入网址" placeholder="搜索或输入网址" autocomplete="off" autofocus required>
+    <select id="engine" aria-label="搜索引擎">
+      <option value="https://www.google.com/search?q=">Google</option>
+      <option value="https://www.bing.com/search?q=">Bing</option>
+      <option value="https://www.baidu.com/s?wd=">百度</option>
+      <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+    </select>
+    <button type="submit">搜索 / 前往</button>
+    <span id="error" role="alert"></span>
+  </form>
+  <footer><a href="https://github.com/cornradio/tray-chrome">GitHub 项目</a></footer>
+</main>
+<script>
+  const query = document.getElementById('query');
+  const engine = document.getElementById('engine');
+  function destination(text, searchEngine) {
+    text = text.trim();
+    if (!text) throw new Error('请输入搜索内容或网址');
+    if (/^https?:\/\//i.test(text)) return new URL(text).href;
+    if (!/\s/.test(text) && /^(localhost(?::\d+)?|(?:[\w-]+\.)+[\w-]+)(?::\d+)?(?:[/?#]|$)/i.test(text))
+      return new URL((/^localhost(?:[:/]|$)/i.test(text) ? 'http://' : 'https://') + text).href;
+    if (/^[a-z][a-z\d+.-]*:/i.test(text))
+      throw new Error('仅支持 HTTP / HTTPS 网址');
+    return searchEngine + encodeURIComponent(text);
+  }
+  document.getElementById('search').addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      document.getElementById('error').textContent = '';
+      location.href = destination(query.value, engine.value);
+    } catch (error) {
+      document.getElementById('error').textContent = error.message;
+    }
+  });
+</script>
+</body>
+</html>

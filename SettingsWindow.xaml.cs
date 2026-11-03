@@ -17,9 +17,17 @@ namespace TrayChrome
         private AppSettings currentSettings;
         private MainWindow? mainWindow;
         private App? app;
+        private bool updatingZoomInput;
+
+        private void MainWindow_BrowserZoomChanged(object sender, EventArgs e)
+        {
+            ZoomFactor = mainWindow.BrowserZoomFactor;
+            ZoomSlider.Value = ZoomFactor;
+            ZoomPercentTextBox.Text = ZoomPercentage.Format(ZoomFactor);
+        }
 
         // 当前版本号
-        private const string CurrentVersion = "3.1.2";
+        private const string CurrentVersion = "3.2.0";
 
         // 标记设置是否已保存（用于非模态窗口）
         public bool SettingsSaved { get; private set; } = false;
@@ -47,6 +55,7 @@ namespace TrayChrome
 
         public SettingsWindow(AppSettings settings, MainWindow? mainWindow = null, App? app = null)
         {
+            AppTheme.EnsureInitialized();
             InitializeComponent();
 
             // 显示当前版本
@@ -66,7 +75,9 @@ namespace TrayChrome
             // 创建当前设置的副本
             currentSettings = new AppSettings
             {
-                ZoomFactor = settings.ZoomFactor,
+                ZoomFactor = mainWindow?.BrowserZoomFactor ?? settings.ZoomFactor,
+                BottomToolbarItems = new List<string>(settings.BottomToolbarItems ?? ToolbarLayout.DefaultItems),
+                HomePage = settings.HomePage,
                 IsMobileUA = settings.IsMobileUA,
                 WindowWidth = settings.WindowWidth,
                 WindowHeight = settings.WindowHeight,
@@ -92,9 +103,32 @@ namespace TrayChrome
             
             // 设置数据绑定
             SetupDataBinding();
+            foreach (var item in ToolbarLayout.Items)
+                ToolbarLayoutOptions.Children.Add(new CheckBox
+                {
+                    Content = item.Label, Tag = item.Id, Width = 170,
+                    IsChecked = currentSettings.BottomToolbarItems.Contains(item.Id)
+                });
+            if (mainWindow != null)
+            {
+                mainWindow.BrowserZoomChanged += MainWindow_BrowserZoomChanged;
+                Closed += (_, _) => mainWindow.BrowserZoomChanged -= MainWindow_BrowserZoomChanged;
+            }
             
             // 加载当前图标设置
             LoadIconSetting();
+        }
+
+        private void ResetToolbarLayout_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var option in ToolbarLayoutOptions.Children.OfType<CheckBox>())
+                option.IsChecked = ToolbarLayout.DefaultItems.Contains((string)option.Tag);
+        }
+
+        private void HideBottomToolbar_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var option in ToolbarLayoutOptions.Children.OfType<CheckBox>())
+                option.IsChecked = false;
         }
 
         private void LoadSettingsToUI()
@@ -106,6 +140,11 @@ namespace TrayChrome
             IsAnimationEnabled = currentSettings.IsAnimationEnabled;
             IsDarkMode = currentSettings.IsDarkMode;
             ZoomFactor = currentSettings.ZoomFactor;
+            HomePageChoice.SelectedIndex = currentSettings.HomePage == StartPage.Url ? 0
+                : currentSettings.HomePage == "about:blank" ? 1 : 2;
+            HomePageUrl.Text = HomePageChoice.SelectedIndex == 2 ? currentSettings.HomePage : string.Empty;
+            HomePageUrl.IsEnabled = HomePageChoice.SelectedIndex == 2;
+            HomePageChoice.SelectionChanged += (_, _) => HomePageUrl.IsEnabled = HomePageChoice.SelectedIndex == 2;
             IsMobileUA = currentSettings.IsMobileUA;
             IsAdBlockEnabled = currentSettings.IsAdBlockEnabled;
             AdBlockRulesText = string.Join("\r\n", currentSettings.AdBlockRules ?? new List<string>());
@@ -146,11 +185,21 @@ namespace TrayChrome
             
             // 缩放
             ZoomSlider.Value = ZoomFactor;
-            ZoomValueLabel.Content = $"{ZoomFactor:F1}x";
+            ZoomPercentTextBox.Text = ZoomPercentage.Format(ZoomFactor);
             ZoomSlider.ValueChanged += (s, e) => 
             { 
                 ZoomFactor = ZoomSlider.Value; 
-                ZoomValueLabel.Content = $"{ZoomFactor:F1}x"; 
+                if (!updatingZoomInput) ZoomPercentTextBox.Text = ZoomPercentage.Format(ZoomFactor);
+            };
+            ZoomPercentTextBox.TextChanged += (_, _) =>
+            {
+                if (ZoomPercentage.TryParse(ZoomPercentTextBox.Text, out double factor))
+                {
+                    ZoomFactor = factor;
+                    updatingZoomInput = true;
+                    try { ZoomSlider.Value = factor; }
+                    finally { updatingZoomInput = false; }
+                }
             };
             
             // UA - 使用事件处理
@@ -307,6 +356,14 @@ namespace TrayChrome
         {
             try
             {
+                if (!ZoomPercentage.TryParse(ZoomPercentTextBox.Text, out double zoom))
+                {
+                    MessageBox.Show("缩放请输入 30–300 的百分比，例如 120 表示 120%。", "错误",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ZoomPercentTextBox.Focus();
+                    return false;
+                }
+                ZoomFactor = zoom;
                 if (CustomIconRadio.IsChecked == true) IconSettings.ValidatePath(customIconPath);
                 var defaults = new AppSettings();
                 if (!double.TryParse(WidthTextBox.Text, out double width)
@@ -333,6 +390,22 @@ namespace TrayChrome
                 currentSettings.IsAnimationEnabled = IsAnimationEnabled;
                 currentSettings.IsDarkMode = IsDarkMode;
                 currentSettings.ZoomFactor = ZoomFactor;
+                currentSettings.BottomToolbarItems = ToolbarLayoutOptions.Children.OfType<CheckBox>()
+                    .Where(option => option.IsChecked == true).Select(option => (string)option.Tag).ToList();
+                string homePage = HomePageChoice.SelectedIndex == 0 ? StartPage.Url
+                    : HomePageChoice.SelectedIndex == 1 ? "about:blank" : HomePageUrl.Text.Trim();
+                if (HomePageChoice.SelectedIndex == 2)
+                {
+                    if (!homePage.Contains("://")) homePage = "https://" + homePage;
+                    if (!Uri.TryCreate(homePage, UriKind.Absolute, out var homeUri)
+                        || (homeUri.Scheme != "http" && homeUri.Scheme != "https") || string.IsNullOrEmpty(homeUri.Host))
+                    {
+                        MessageBox.Show("首页请输入有效的 HTTP / HTTPS 网址。", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        HomePageUrl.Focus();
+                        return false;
+                    }
+                }
+                currentSettings.HomePage = homePage;
                 currentSettings.IsMobileUA = IsMobileUA;
                 currentSettings.IsAdBlockEnabled = IsAdBlockEnabled;
                 currentSettings.AdBlockRules = AdBlockRulesText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
@@ -456,6 +529,8 @@ namespace TrayChrome
         private void CopySettings(AppSettings target, AppSettings source)
         {
             target.ZoomFactor = source.ZoomFactor;
+            target.BottomToolbarItems = new List<string>(source.BottomToolbarItems ?? ToolbarLayout.DefaultItems);
+            target.HomePage = source.HomePage;
             target.IsMobileUA = source.IsMobileUA;
             target.WindowWidth = source.WindowWidth;
             target.WindowHeight = source.WindowHeight;

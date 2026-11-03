@@ -4,7 +4,7 @@
         Title="App 组管理" Width="760" Height="520" MinWidth="560" MinHeight="320"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
-        <Style TargetType="Button">
+        <Style TargetType="Button" BasedOn="{StaticResource ThemeButton}">
             <Setter Property="Margin" Value="5"/>
             <Setter Property="Padding" Value="10,5"/>
         </Style>

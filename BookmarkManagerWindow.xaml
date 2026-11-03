@@ -4,7 +4,7 @@
         Title="书签管理器" Width="760" Height="600" MinWidth="600" MinHeight="400"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
-        <Style TargetType="Button">
+        <Style TargetType="Button" BasedOn="{StaticResource ThemeButton}">
             <Setter Property="Margin" Value="5"/>
             <Setter Property="Padding" Value="10,5"/>
         </Style>
@@ -77,13 +77,13 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="Medium"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="{Binding Url}" Foreground="Gray" FontSize="11"
+                        <TextBlock Grid.Column="1" Text="{Binding Url}" Foreground="{DynamicResource ThemeMuted}" FontSize="11"
                                    TextTrimming="CharacterEllipsis" Margin="10,0,0,0" VerticalAlignment="Center"/>
                     </Grid>
                 </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>
         </TreeView>
         </DockPanel>
-        <TextBlock Grid.Row="2" Name="BookmarkStatusText" Margin="0,5,0,0" Foreground="Gray" FontSize="10"/>
+        <TextBlock Grid.Row="2" Name="BookmarkStatusText" Margin="0,5,0,0" Foreground="{DynamicResource ThemeMuted}" FontSize="10"/>
     </Grid>
 </Window>

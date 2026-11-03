@@ -6,6 +6,17 @@ namespace TrayChrome
 {
     public partial class MainWindow
     {
+        private void MoreContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            BrowserMenu_Opened(sender, e);
+            UserAgentMenuItem.IsChecked = isMobileUA;
+            DarkModeMenuItem.IsChecked = isDarkMode;
+            ProxyToggleMenuItem2.IsChecked = appSettings.IsProxyEnabled;
+            PinMenuItem.IsChecked = isTopMost;
+            BackMenuItem.IsEnabled = webView.CoreWebView2?.CanGoBack == true;
+            ForwardMenuItem.IsEnabled = webView.CoreWebView2?.CanGoForward == true;
+        }
+
         private ContextMenu CreateBrowserMenu()
         {
             var menu = new ContextMenu { Style = (Style)FindResource("BrowserContextMenuStyle") };

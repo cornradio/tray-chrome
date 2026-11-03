@@ -39,6 +39,7 @@ namespace TrayChrome
         private bool tabInitializing;
         private BrowserTab tabDragCandidate;
         private Point tabDragStart;
+        private long? lastTabWheelSwitch;
         public int ActiveTabIndex => tabs.IndexOf(activeTab);
         private bool startupTabsRestoring = true;
         private bool tabsReady;
@@ -59,7 +60,14 @@ namespace TrayChrome
 
         private void ApplyBrowserZoom()
         {
-            foreach (var tab in tabs) tab.View.ZoomFactor = currentZoomFactor;
+            applyingBrowserZoom = true;
+            try
+            {
+                foreach (var tab in tabs) tab.View.ZoomFactor = currentZoomFactor;
+            }
+            finally { applyingBrowserZoom = false; }
+            UpdateZoomControls();
+            BrowserZoomChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private void RegisterTab(WebView2 view, string url)
@@ -68,9 +76,15 @@ namespace TrayChrome
             view.SizeChanged += (_, _) =>
                 Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
             var tab = new BrowserTab { View = view, Url = url };
+            view.ZoomFactorChanged += (_, _) =>
+            {
+                if (!applyingBrowserZoom && tab == activeTab && view.ZoomFactor != currentZoomFactor)
+                    SetBrowserZoom(Math.Clamp(view.ZoomFactor, 0.3, 3.0));
+            };
             view.IsVisibleChanged += (_, _) => RefreshPagePresentation(tab);
-            tab.Header = new Button { Content = "新标签页", MaxWidth = 160,
+            tab.Header = new Button { MaxWidth = 120,
                 Style = (Style)FindResource("TabHeaderStyle"), AllowDrop = true, Tag = tab };
+            UpdateTabHeader(tab, "新标签页");
             tab.Header.Click += (_, _) => SelectTab(tab);
             tab.Header.PreviewMouseLeftButtonDown += (_, args) =>
             {
@@ -172,6 +186,18 @@ namespace TrayChrome
                 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        private void TabToolbar_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (tabs.Count < 2 || e.Delta == 0) return;
+            e.Handled = true;
+            if (tabInitializing) return;
+            long now = Environment.TickCount64;
+            if (lastTabWheelSwitch.HasValue && now - lastTabWheelSwitch.Value < 150) return;
+            lastTabWheelSwitch = now;
+            int step = e.Delta > 0 ? -1 : 1;
+            SelectTab(tabs[(tabs.IndexOf(activeTab) + step + tabs.Count) % tabs.Count]);
+        }
+
         private void SelectTab(BrowserTab tab)
         {
             if (tabInitializing || activeTab == tab) return;
@@ -224,20 +250,34 @@ namespace TrayChrome
             }
         }
 
-        public async Task OpenTabAsync(string url = "https://tva.cornradio.org/?name=search", bool focusAddressBar = false)
+        public async Task OpenTabAsync(string url = null, bool focusAddressBar = false)
         {
             if (tabInitializing)
             {
                 MessageBox.Show("标签页正在初始化，请稍后再试。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
+            url = string.IsNullOrWhiteSpace(url) ? appSettings.HomePage : url;
+            var previousTab = activeTab;
             var view = new WebView2 { ZoomFactor = currentZoomFactor };
             BrowserHost.Children.Add(view);
             RegisterTab(view, url);
             var tab = tabs.Last();
             TabsReady = false;
-            try { await InitializeWebViewInternal(url); }
+            bool initialized;
+            try { initialized = await InitializeWebViewInternal(url); }
             finally { TabsReady = tabs.All(item => item.View.CoreWebView2 != null); }
+            if (!initialized)
+            {
+                await browserInputLock.WaitAsync();
+                try
+                {
+                    if (tabs.Contains(previousTab)) SelectTab(previousTab);
+                    RemoveTab(tab);
+                }
+                finally { browserInputLock.Release(); }
+                return;
+            }
             if (focusAddressBar && tab == activeTab)
             {
                 addressBarEdited = false;
@@ -251,6 +291,31 @@ namespace TrayChrome
         }
 
         private async void NewTab_Click(object sender, RoutedEventArgs e) => await OpenTabAsync(focusAddressBar: true);
+
+        private async Task InitializeTabBrowserAsync(BrowserTab tab)
+        {
+            try
+            {
+                await WebView2EnvironmentHelper.EnsureCoreWebView2WithFallbackAsync(tab.View, appSettings);
+            }
+            catch (System.Runtime.InteropServices.COMException ex) when (ex.HResult == unchecked((int)0x80010108))
+            {
+                (Application.Current as App)?.WriteDiagnostic("Browser connection disconnected during initialization; recreating tab once", ex);
+                var failedView = tab.View;
+                int index = BrowserHost.Children.IndexOf(failedView);
+                BrowserHost.Children.Remove(failedView);
+                failedView.Dispose();
+                var replacement = new WebView2 { ZoomFactor = currentZoomFactor };
+                replacement.IsVisibleChanged += (_, _) => RefreshPagePresentation(tab);
+                replacement.SizeChanged += (_, _) =>
+                    Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
+                tab.View = replacement;
+                if (tab == activeTab) webView = replacement;
+                BrowserHost.Children.Insert(index, replacement);
+                await WebView2EnvironmentHelper.EnsureCoreWebView2WithFallbackAsync(replacement, appSettings);
+                (Application.Current as App)?.WriteDiagnostic("Browser tab connection recovered");
+            }
+        }
 
         private void FocusAddressBar()
         {
@@ -278,15 +343,7 @@ namespace TrayChrome
             {
                 if (tabInitializing || !tabs.Contains(tab)) return;
                 if (tabs.Count == 1) { HideWithAnimation(); return; }
-                if (tab == activeTab)
-                    SelectTab(tabs[tabs.IndexOf(tab) == 0 ? 1 : tabs.IndexOf(tab) - 1]);
-                tabs.Remove(tab);
-                UpdateTabBarVisibility();
-                var panel = TabHeaders.Children.Cast<StackPanel>().Single(item => item.Tag == tab);
-                TabHeaders.Children.Remove(panel);
-                BrowserHost.Children.Remove(tab.View);
-                tab.View.Dispose();
-                TabsReady = tabs.All(item => item.View.CoreWebView2 != null);
+                RemoveTab(tab);
             }
             catch (Exception ex)
             {
@@ -294,6 +351,19 @@ namespace TrayChrome
                 MessageBox.Show($"关闭标签页失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             finally { browserInputLock.Release(); }
+        }
+
+        private void RemoveTab(BrowserTab tab)
+        {
+            if (tab == activeTab)
+                SelectTab(tabs[tabs.IndexOf(tab) == 0 ? 1 : tabs.IndexOf(tab) - 1]);
+            tabs.Remove(tab);
+            UpdateTabBarVisibility();
+            var panel = TabHeaders.Children.Cast<StackPanel>().Single(item => item.Tag == tab);
+            TabHeaders.Children.Remove(panel);
+            BrowserHost.Children.Remove(tab.View);
+            tab.View.Dispose();
+            TabsReady = tabs.All(item => item.View.CoreWebView2 != null);
         }
 
         public List<string> CaptureTabUrls() => tabs.Select(tab => tab.View.CoreWebView2?.Source ?? tab.Url).ToList();
@@ -327,9 +397,22 @@ namespace TrayChrome
             var tab = tabs.FirstOrDefault(item => item.View == view);
             if (tab == null) return;
             tab.Url = view.CoreWebView2.Source;
-            tab.Header.Content = string.IsNullOrWhiteSpace(view.CoreWebView2.DocumentTitle)
-                ? tab.Url : view.CoreWebView2.DocumentTitle;
-            tab.Header.ToolTip = tab.Url;
+            UpdateTabHeader(tab, view.CoreWebView2.DocumentTitle);
+        }
+
+        private static void UpdateTabHeader(BrowserTab tab, string title)
+        {
+            string fullTitle = string.IsNullOrWhiteSpace(title) ? tab.Url : title;
+            tab.Header.Content = new TextBlock
+            {
+                Text = fullTitle,
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            var tooltip = new StackPanel();
+            tooltip.Children.Add(new TextBlock { Text = fullTitle });
+            tooltip.Children.Add(new TextBlock { Text = tab.Url });
+            tab.Header.ToolTip = tooltip;
         }
     }
 }

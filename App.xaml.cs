@@ -437,7 +437,7 @@ namespace TrayChrome
             catch (Exception ex) { WriteDiagnostic("Showing tray notification failed", ex); }
         }
 
-        private void OpenSettings(bool showIconSection = false)
+        public void OpenSettings(bool showIconSection = false)
         {
             try
             {

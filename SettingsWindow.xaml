@@ -9,7 +9,7 @@
         MinWidth="600"
         MinHeight="500">
     <Window.Resources>
-        <Style TargetType="GroupBox">
+        <Style TargetType="GroupBox" BasedOn="{StaticResource ThemeGroupBox}">
             <Setter Property="Margin" Value="10,5"/>
             <Setter Property="Padding" Value="10"/>
         </Style>
@@ -20,11 +20,11 @@
             <Setter Property="Margin" Value="5,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
-        <Style TargetType="TextBox">
+        <Style TargetType="TextBox" BasedOn="{StaticResource ThemeTextBox}">
             <Setter Property="Margin" Value="5"/>
             <Setter Property="Padding" Value="5"/>
         </Style>
-        <Style TargetType="Button">
+        <Style TargetType="Button" BasedOn="{StaticResource ThemeButton}">
             <Setter Property="Margin" Value="5"/>
             <Setter Property="Padding" Value="10,5"/>
             <Setter Property="MinWidth" Value="80"/>
@@ -64,7 +64,7 @@
                                 
                                 <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" 
                                        Content="提示：应用后立即生效；无效尺寸恢复默认 360x640"
-                                       Foreground="Gray" FontSize="10"/>
+                                       Foreground="{DynamicResource ThemeMuted}" FontSize="10"/>
                             </Grid>
                         </GroupBox>
                         
@@ -83,6 +83,16 @@
             <TabItem Header="外观设置" Name="AppearanceTab">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="10">
+                        <GroupBox Header="底栏与更多菜单">
+                            <StackPanel>
+                                <TextBlock Margin="5" Text="勾选放在底栏，未勾选放在 … 菜单；搜索固定在左上角。"/>
+                                <WrapPanel Name="ToolbarLayoutOptions"/>
+                                <Button Name="ResetToolbarLayoutButton" Content="恢复默认底栏"
+                                        HorizontalAlignment="Left" Click="ResetToolbarLayout_Click"/>
+                                <Button Name="HideBottomToolbarButton" Content="隐藏底部栏（清空选择）"
+                                        HorizontalAlignment="Left" Click="HideBottomToolbar_Click"/>
+                            </StackPanel>
+                        </GroupBox>
                         <GroupBox Header="主题">
                             <StackPanel>
                                 <CheckBox Name="DarkModeCheckBox" Content="暗色模式"/>
@@ -148,8 +158,21 @@
                                     <Label Grid.Column="0" Content="缩放比例:"/>
                                     <Slider Grid.Column="1" Name="ZoomSlider" Minimum="0.3" Maximum="3.0" TickFrequency="0.1" 
                                             TickPlacement="BottomRight" Margin="5"/>
-                                    <Label Grid.Column="2" Name="ZoomValueLabel" MinWidth="50"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                        <TextBox Name="ZoomPercentTextBox" Width="70" ToolTip="120 表示 120%，范围 30–300"/>
+                                        <Label Content="%"/>
+                                    </StackPanel>
                                 </Grid>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="首页（普通启动和新标签页）">
+                            <StackPanel Margin="5">
+                                <ComboBox Name="HomePageChoice">
+                                    <ComboBoxItem Content="内置起始页（搜索 / 输入网址）"/>
+                                    <ComboBoxItem Content="纯空白页（about:blank）"/>
+                                    <ComboBoxItem Content="自定义网址"/>
+                                </ComboBox>
+                                <TextBox Name="HomePageUrl" Margin="0,5,0,0" ToolTip="HTTP / HTTPS 网址"/>
                             </StackPanel>
                         </GroupBox>
                         
@@ -172,7 +195,7 @@
                                     <TextBox Grid.Column="1" Name="ProxyServerTextBox" ToolTip="例如：127.0.0.1:7890"/>
                                 </Grid>
                                 <Label Content="提示：修改代理后请重启浏览器生效！" 
-                                       Foreground="Gray" FontSize="10" Margin="5,0,5,5"/>
+                                       Foreground="{DynamicResource ThemeMuted}" FontSize="10" Margin="5,0,5,5"/>
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>
@@ -229,7 +252,7 @@
                                 </Grid>
                                 
                                 <Label Content="提示：快捷键用于显示/隐藏窗口" 
-                                       Foreground="Gray" 
+                                       Foreground="{DynamicResource ThemeMuted}"
                                        FontSize="10" 
                                        Margin="5,5,5,0"/>
                             </StackPanel>
@@ -239,6 +262,8 @@
                             <StackPanel Margin="5">
                                 <TextBlock TextWrapping="Wrap" Margin="5">
                                     <Run Text="以下是在 TrayChrome 中可用的快捷键：" FontWeight="Bold"/>
+                                    <LineBreak/>
+                                    <Run Text="• Ctrl + ,：打开设置"/>
                                     <LineBreak/><LineBreak/>
                                     <Run Text="• 中键(托盘图标)：" FontWeight="Bold"/>
                                     <Run Text="关闭 TrayChrome 实例"/>
@@ -327,7 +352,7 @@
                             </GridView>
                         </ListView.View>
                     </ListView>
-                    <TextBlock Grid.Row="2" Name="UserScriptStatus" Margin="5" Foreground="Gray" TextWrapping="Wrap"
+                    <TextBlock Grid.Row="2" Name="UserScriptStatus" Margin="5" Foreground="{DynamicResource ThemeMuted}" TextWrapping="Wrap"
                                Text="支持 @match/@include/@exclude/@run-at/@require/@resource 及常用 GM_* 接口。修改后刷新网页生效；在网页中打开 .user.js 链接（如 Greasy Fork 的安装按钮）可直接安装。"/>
                 </Grid>
             </TabItem>
@@ -351,7 +376,7 @@
                                     <TextBlock Name="VersionText" Text="1.3.0" FontWeight="Bold" VerticalAlignment="Center"/>
                                 </StackPanel>
                                 <Button Name="CheckUpdateButton" Content="检查更新" Click="CheckUpdateButton_Click" HorizontalAlignment="Left" Margin="5"/>
-                                <TextBlock Name="UpdateStatusText" Foreground="Gray" FontSize="11" Margin="5" TextWrapping="Wrap"/>
+                                <TextBlock Name="UpdateStatusText" Foreground="{DynamicResource ThemeMuted}" FontSize="11" Margin="5" TextWrapping="Wrap"/>
                             </StackPanel>
                         </GroupBox>
 

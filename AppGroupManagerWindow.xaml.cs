@@ -28,6 +28,7 @@ namespace TrayChrome
 
         public AppGroupManagerWindow()
         {
+            AppTheme.EnsureInitialized();
             InitializeComponent();
             InitializeAppGroups();
             Closed += (_, _) => editDialog?.Close();
