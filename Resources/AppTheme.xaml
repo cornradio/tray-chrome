@@ -40,8 +40,66 @@
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}"/>
     </Style>
     <Style TargetType="Label"><Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/></Style>
-    <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/></Style>
-    <Style TargetType="RadioButton"><Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/></Style>
+    <Style x:Key="ThemeCheckBox" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <DockPanel Background="Transparent">
+                        <Border x:Name="Box" Width="13" Height="13" Margin="0,0,6,0" VerticalAlignment="Center"
+                                Background="{DynamicResource ThemeSurface}" BorderBrush="{DynamicResource ThemeBorder}" BorderThickness="1" CornerRadius="2">
+                            <Grid>
+                                <Path x:Name="Mark" Data="M 2,6 L 5,9 L 10,2" Stroke="{DynamicResource ThemeForeground}" StrokeThickness="1.5" Visibility="Collapsed"/>
+                                <Border x:Name="Mixed" Height="2" Margin="2" Background="{DynamicResource ThemeForeground}" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </DockPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True"><Setter TargetName="Mark" Property="Visibility" Value="Visible"/></Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}"><Setter TargetName="Mixed" Property="Visibility" Value="Visible"/></Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource ThemeHover}"/></Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="#0A84FF"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="CheckBox" BasedOn="{StaticResource ThemeCheckBox}"/>
+    <Style TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <DockPanel Background="Transparent">
+                        <Grid Width="13" Height="13" Margin="0,0,6,0" VerticalAlignment="Center">
+                            <Ellipse x:Name="Circle" Fill="{DynamicResource ThemeSurface}" Stroke="{DynamicResource ThemeBorder}"/>
+                            <Ellipse x:Name="Dot" Fill="{DynamicResource ThemeForeground}" Margin="4" Visibility="Collapsed"/>
+                        </Grid>
+                        <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </DockPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True"><Setter TargetName="Dot" Property="Visibility" Value="Visible"/></Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Circle" Property="Fill" Value="{DynamicResource ThemeHover}"/></Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Circle" Property="Stroke" Value="#0A84FF"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="ThemeSeparator" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="4,4" Background="{DynamicResource ThemeBorder}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="Separator" BasedOn="{StaticResource ThemeSeparator}"/>
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator" BasedOn="{StaticResource ThemeSeparator}"/>
     <Style x:Key="ThemeGroupBox" TargetType="GroupBox">
         <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}"/>
@@ -140,6 +198,7 @@
                             </ToggleButton.Template>
                         </ToggleButton>
                         <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
                                           Margin="6,4,24,4" IsHitTestVisible="False" VerticalAlignment="Center"/>
                         <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
                             <Border Background="{DynamicResource ThemeSurface}" BorderBrush="{DynamicResource ThemeBorder}" BorderThickness="1"
@@ -198,9 +257,25 @@
         <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
     </Style>
     <Style TargetType="ContextMenu">
+        <Style.Resources>
+            <Style TargetType="Separator" BasedOn="{StaticResource ThemeSeparator}"/>
+        </Style.Resources>
         <Setter Property="Background" Value="{DynamicResource ThemeSurface}"/>
         <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}"/>
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" Padding="{TemplateBinding Padding}" CornerRadius="4">
+                        <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style TargetType="MenuItem">
         <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>

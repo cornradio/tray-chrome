@@ -13,7 +13,7 @@
             <Setter Property="Margin" Value="10,5"/>
             <Setter Property="Padding" Value="10"/>
         </Style>
-        <Style TargetType="CheckBox">
+        <Style TargetType="CheckBox" BasedOn="{StaticResource ThemeCheckBox}">
             <Setter Property="Margin" Value="5"/>
         </Style>
         <Style TargetType="Label">
@@ -87,6 +87,8 @@
                             <StackPanel>
                                 <TextBlock Margin="5" Text="勾选放在底栏，未勾选放在 … 菜单；搜索固定在左上角。"/>
                                 <WrapPanel Name="ToolbarLayoutOptions"/>
+                                <Button Name="SelectAllToolbarButton" Content="全部勾选"
+                                        HorizontalAlignment="Left" Click="SelectAllToolbar_Click"/>
                                 <Button Name="ResetToolbarLayoutButton" Content="恢复默认底栏"
                                         HorizontalAlignment="Left" Click="ResetToolbarLayout_Click"/>
                                 <Button Name="HideBottomToolbarButton" Content="隐藏底部栏（清空选择）"
@@ -429,7 +431,7 @@
         </TabControl>
         
         <!-- 底部按钮 -->
-        <Border Grid.Row="1" BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="10,10,10,5">
+        <Border Grid.Row="1" BorderBrush="{DynamicResource ThemeBorder}" BorderThickness="0,1,0,0" Padding="10,10,10,5">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Name="OkButton" Content="保存并关闭" Click="OkButton_Click" IsDefault="True" MinWidth="120"/>
                 <Button Name="ApplyButton" Content="应用" Click="ApplyButton_Click" MinWidth="100"/>

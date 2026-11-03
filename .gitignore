@@ -2,3 +2,5 @@ obj/
 bin/
 .vscode/
 publish/
+history.json
+history.json.*.tmp

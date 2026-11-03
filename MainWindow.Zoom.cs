@@ -34,7 +34,7 @@ namespace TrayChrome
 
         private void UpdateZoomControls()
         {
-            ZoomButton.Content = ZoomPercentage.Format(currentZoomFactor) + "%";
+            ZoomButton.ToolTip = "调整缩放比例（" + ZoomPercentage.Format(currentZoomFactor) + "%）";
             ZoomPercentInput.Text = ZoomPercentage.Format(currentZoomFactor);
         }
 

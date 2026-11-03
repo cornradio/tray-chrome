@@ -1,0 +1,27 @@
+<Window x:Class="TrayChrome.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="历史记录（所有实例 · 最近 7 天）" Width="760" Height="540" MinWidth="560" MinHeight="320"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,8">
+            <Button DockPanel.Dock="Right" Content="一键清空" Click="Clear_Click" Margin="6,0,0,0"/>
+            <Button DockPanel.Dock="Right" Content="刷新" Click="Refresh_Click" Margin="6,0,0,0"/>
+            <Button DockPanel.Dock="Right" Content="打开" Click="Open_Click" Margin="6,0,0,0"/>
+            <TextBox Name="SearchBox" Padding="5" TextChanged="Search_TextChanged" ToolTip="搜索标题或网址"/>
+        </DockPanel>
+        <DataGrid Grid.Row="1" Name="RecordsGrid" IsReadOnly="True" AutoGenerateColumns="False"
+                  CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
+                  MouseDoubleClick="Open_Click">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="访问时间" Binding="{Binding LocalTime}" Width="150"/>
+                <DataGridTextColumn Header="标题" Binding="{Binding Title}" Width="2*"/>
+                <DataGridTextColumn Header="网址" Binding="{Binding Url}" Width="3*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <TextBlock Grid.Row="2" Name="Status" Margin="0,8,0,0" Foreground="{DynamicResource ThemeMuted}"/>
+    </Grid>
+</Window>

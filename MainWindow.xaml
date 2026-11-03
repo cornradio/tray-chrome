@@ -322,9 +322,19 @@
                     </Button.ContextMenu>
                 </Button>
                 
-                <Button Name="SettingsButton" Content="⚙"
+                <Button Name="HistoryButton" Content="◷" ToolTip="历史记录（所有实例）"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="HistoryButton_Click"/>
+                <Button Name="SettingsButton"
                         Style="{StaticResource ToolbarButtonStyle}" Click="SettingsButton_Click"
-                        ToolTip="设置 (Ctrl+,)"/>
+                        ToolTip="设置 (Ctrl+,)">
+                    <Viewbox Width="14" Height="14">
+                        <Grid Width="16" Height="16">
+                            <Path Stroke="{Binding Foreground, ElementName=SettingsButton}" StrokeThickness="1.25" StrokeLineJoin="Round"
+                                  Data="M 6.5,1 L 9.5,1 L 10,3 L 11,3.6 L 13,3 L 14.5,5.6 L 13,7 L 13,9 L 14.5,10.4 L 13,13 L 11,12.4 L 10,13 L 9.5,15 L 6.5,15 L 6,13 L 5,12.4 L 3,13 L 1.5,10.4 L 3,9 L 3,7 L 1.5,5.6 L 3,3 L 5,3.6 L 6,3 Z"/>
+                            <Ellipse Width="5" Height="5" Stroke="{Binding Foreground, ElementName=SettingsButton}" StrokeThickness="1.25"/>
+                        </Grid>
+                    </Viewbox>
+                </Button>
                 <Button Grid.Column="6" Name="MoreButton" Content="…"
                         Style="{StaticResource ToolbarButtonStyle}" Click="MoreButton_Click" ToolTip="更多">
                     <Button.ContextMenu>
@@ -334,6 +344,7 @@
                             <MenuItem Name="ForwardMenuItem" Header="前进" Click="ForwardButton_Click"/>
                             <MenuItem Name="RefreshMenuItem" Header="刷新" Click="RefreshButton_Click"/>
                             <MenuItem Name="BookmarkMenuItem" Header="收藏夹" Click="ToolbarBookmarks_Click"/>
+                            <MenuItem Name="HistoryMenuItem" Header="历史记录" Click="HistoryButton_Click"/>
                             <MenuItem Name="PinMenuItem" Header="窗口置顶" IsCheckable="True" Click="TopMostButton_Click"/>
                             <MenuItem Name="ZoomMenuItem" Header="缩放" Click="ZoomButton_Click"/>
                             <MenuItem Name="OpenBrowserMenuItem" Header="用默认浏览器打开" Click="PopupButton_Click"/>
@@ -353,18 +364,37 @@
                 <Button Grid.Column="4" Name="TopMostButton"
                         Style="{StaticResource ToolbarButtonStyle}" Click="TopMostButton_Click"
                         ToolTip="取消置顶">
-                    <Path Width="10" Height="11" Stretch="Uniform"
-                          Fill="{Binding Foreground, ElementName=TopMostButton}"
-                          Data="M 4,0 L 10,0 L 9,6 L 12,9 L 12,10 L 7.7,10 L 7,15 L 6.3,10 L 2,10 L 2,9 L 5,6 Z"/>
+                    <Viewbox Width="14" Height="14">
+                        <Path Width="16" Height="16" Stroke="{Binding Foreground, ElementName=TopMostButton}"
+                              StrokeThickness="1.25" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M 8,2 L 14,8 L 12.5,9.5 L 11,8 L 7,10 L 7,12 L 4,9 L 6,9 L 8,5 L 6.5,3.5 Z M 5.5,10.5 L 1.5,14.5"/>
+                    </Viewbox>
                 </Button>
-                <Button Name="OpenBrowserButton" Content="↗" Visibility="Collapsed"
-                        Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click" ToolTip="用默认浏览器打开"/>
-                <Button Name="UserAgentButton" Content="UA" FontSize="10" Visibility="Collapsed"
-                        Style="{StaticResource ToolbarButtonStyle}" Click="UAButton_Click" ToolTip="切换手机 / 桌面 UA"/>
-                <Button Name="ThemeButton" Content="☾" Visibility="Collapsed"
-                        Style="{StaticResource ToolbarButtonStyle}" Click="DarkModeButton_Click" ToolTip="切换黑白模式"/>
-                <Button Name="ProxyButton" Content="◎" Visibility="Collapsed"
+                <Button Name="OpenBrowserButton" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="PopupButton_Click" ToolTip="用默认浏览器打开">
+                    <Viewbox Width="14" Height="14">
+                        <Path Width="16" Height="16" Stroke="{Binding Foreground, ElementName=OpenBrowserButton}" StrokeThickness="1.4"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M 6,10 L 10,6 M 5,7 L 3,9 A 2.8,2.8 0 0 0 7,13 L 9,11 M 7,5 L 9,3 A 2.8,2.8 0 0 1 13,7 L 11,9"/>
+                    </Viewbox>
+                </Button>
+                <Button Name="UserAgentButton" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="UAButton_Click" ToolTip="切换手机 / 桌面 UA">
+                    <Viewbox Width="14" Height="14">
+                        <Path Name="UserAgentIcon" Width="16" Height="16" Stroke="{Binding Foreground, ElementName=UserAgentButton}"
+                              StrokeThickness="1.25" StrokeLineJoin="Round"/>
+                    </Viewbox>
+                </Button>
+                <Button Name="ThemeButton" Visibility="Collapsed"
+                        Style="{StaticResource ToolbarButtonStyle}" Click="DarkModeButton_Click" ToolTip="切换黑白模式">
+                    <Viewbox Width="14" Height="14">
+                        <Path Name="ThemeIcon" Width="16" Height="16" Stroke="{Binding Foreground, ElementName=ThemeButton}"
+                              StrokeThickness="1.25" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Viewbox>
+                </Button>
+                <Button Name="ProxyButton" Visibility="Collapsed"
                         Style="{StaticResource ToolbarButtonStyle}" Click="ToolbarProxy_Click" ToolTip="代理">
+                    <Ellipse Width="12" Height="12" Stroke="{Binding Foreground, ElementName=ProxyButton}" StrokeThickness="1.5"/>
                     <Button.ContextMenu>
                         <ContextMenu Style="{StaticResource BrowserContextMenuStyle}" Opened="ToolbarProxyMenu_Opened">
                             <MenuItem Name="ToolbarProxyToggle" Header="启用代理" IsCheckable="True" Click="ProxyToggle_Click"/>
@@ -382,9 +412,15 @@
                        VerticalContentAlignment="Center"
                        ToolTip="拖拽移动窗口"/>
                        
-                <Button Grid.Column="5" Name="ZoomButton" Content="80%" FontSize="10"
+                <Button Grid.Column="5" Name="ZoomButton"
                         Style="{StaticResource ToolbarButtonStyle}" Click="ZoomButton_Click"
-                        ToolTip="调整缩放比例"/>
+                        ToolTip="调整缩放比例">
+                    <Viewbox Width="14" Height="14">
+                        <Path Width="16" Height="16" Stroke="{Binding Foreground, ElementName=ZoomButton}"
+                              StrokeThickness="1.25" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M 11,6 A 5,5 0 1 1 1,6 A 5,5 0 1 1 11,6 M 10,10 L 15,15 M 3.5,6 L 8.5,6 M 6,3.5 L 6,8.5"/>
+                    </Viewbox>
+                </Button>
                 <Popup Name="ZoomPopup" PlacementTarget="{Binding ElementName=ZoomButton}"
                        Placement="Top" StaysOpen="False" AllowsTransparency="True">
                     <Border Background="{Binding Background, ElementName=BottomToolbar}"

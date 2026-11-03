@@ -132,6 +132,7 @@ namespace TrayChrome
             // 设置初始置顶状态
             this.Topmost = isTopMost;
             UpdateTopMostButtonAppearance();
+            UpdateToolbarIcons();
             
             // 应用超级极简模式设置
             if (isSuperMinimalMode)
@@ -163,6 +164,7 @@ namespace TrayChrome
             };
             this.Closed += (_, _) =>
             {
+                historyWindow?.Close();
                 foreach (var tab in tabs) tab.View.Dispose();
             };
             
@@ -330,7 +332,19 @@ namespace TrayChrome
                     UserScriptNavigationStarting(view, e);
                     if (view == webView) CoreWebView2_NavigationStarting(s, e);
                 };
-                webView.CoreWebView2.NavigationCompleted += (s, e) => { if (view == webView) CoreWebView2_NavigationCompleted(s, e); };
+                webView.CoreWebView2.NavigationCompleted += async (s, e) =>
+                {
+                    if (view == webView) CoreWebView2_NavigationCompleted(s, e);
+                    if (e.IsSuccess)
+                    {
+                        try { await VisitHistory.RecordAsync(view.CoreWebView2.Source, view.CoreWebView2.DocumentTitle); }
+                        catch (Exception ex)
+                        {
+                            (Application.Current as App)?.WriteDiagnostic("Recording visit history failed", ex);
+                            (Application.Current as App)?.ShowTrayNotification("历史记录保存失败", ex.Message);
+                        }
+                    }
+                };
                 TrackPageLoading(view);
                 webView.CoreWebView2.SourceChanged += (s, e) => { RefreshTabTitle(view); if (view == webView) CoreWebView2_SourceChanged(s, e); };
                 
@@ -898,7 +912,7 @@ namespace TrayChrome
                  var buttons = new[]
                  {
                      CloseButton, BackButton, ForwardButton, RefreshButton, BookmarkButton,
-                     MoreButton, TopMoreButton, SettingsButton, TopMostButton, SearchButton, ZoomButton, ZoomOutButton, ZoomInButton,
+                     MoreButton, TopMoreButton, SettingsButton, HistoryButton, TopMostButton, SearchButton, ZoomButton, ZoomOutButton, ZoomInButton,
                      OpenBrowserButton, UserAgentButton, ThemeButton, ProxyButton
                  };
                  
@@ -967,6 +981,7 @@ namespace TrayChrome
                      }
                  }
                  UpdateTopMostButtonAppearance();
+                 UpdateToolbarIcons();
              }
              catch (Exception ex)
              {
@@ -980,7 +995,7 @@ namespace TrayChrome
              {
                  TopMostButton.Foreground = isTopMost
                      ? Brushes.DodgerBlue
-                     : new SolidColorBrush(isDarkMode ? Color.FromRgb(0xAA, 0xAA, 0xAA) : Color.FromRgb(0x66, 0x66, 0x66));
+                     : ThemeButton.Foreground;
                  TopMostButton.ToolTip = isTopMost ? "取消置顶" : "窗口置顶";
              }
          }
@@ -1875,6 +1890,7 @@ namespace TrayChrome
                 }
                 
                 // 刷新当前页面以应用新的用户代理
+                UpdateToolbarIcons();
                 webView.CoreWebView2.Reload();
             }
         }

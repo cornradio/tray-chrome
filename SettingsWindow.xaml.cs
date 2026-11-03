@@ -131,6 +131,12 @@ namespace TrayChrome
                 option.IsChecked = false;
         }
 
+        private void SelectAllToolbar_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var option in ToolbarLayoutOptions.Children.OfType<CheckBox>())
+                option.IsChecked = true;
+        }
+
         private void LoadSettingsToUI()
         {
             WindowWidth = currentSettings.WindowWidth;
