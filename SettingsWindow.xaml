@@ -149,7 +149,7 @@
             <TabItem Header="浏览器设置">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="10">
-                        <GroupBox Header="缩放">
+                        <GroupBox Header="当前网站缩放（按网站记忆）">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -265,7 +265,7 @@
                                 <TextBlock TextWrapping="Wrap" Margin="5">
                                     <Run Text="以下是在 TrayChrome 中可用的快捷键：" FontWeight="Bold"/>
                                     <LineBreak/>
-                                    <Run Text="• Ctrl + ,：打开设置"/>
+                                    <Run Text="• Ctrl + Shift + ,：打开设置"/>
                                     <LineBreak/><LineBreak/>
                                     <Run Text="• 中键(托盘图标)：" FontWeight="Bold"/>
                                     <Run Text="关闭 TrayChrome 实例"/>

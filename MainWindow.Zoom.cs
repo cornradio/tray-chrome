@@ -24,12 +24,69 @@ namespace TrayChrome
         public double BrowserZoomFactor => currentZoomFactor;
         public event EventHandler BrowserZoomChanged;
 
+        private void TrackTabZoom(BrowserTab tab, Microsoft.Web.WebView2.Wpf.WebView2 view)
+        {
+            view.ZoomFactorChanged += (_, _) =>
+            {
+                if (!applyingBrowserZoom && tab == activeTab && view.ZoomFactor != currentZoomFactor)
+                    SetBrowserZoom(Math.Clamp(view.ZoomFactor, 0.3, 3.0));
+            };
+        }
+
         private void SetBrowserZoom(double factor)
         {
+            string url = activeTab?.View.Source?.AbsoluteUri ?? activeTab?.Url;
+            string site = SiteZoomStore.Site(url);
+            try
+            {
+                if (site != null) SiteZoomStore.Save(url, factor);
+            }
+            catch (Exception ex) { ReportSiteZoomError(ex); return; }
             currentZoomFactor = factor;
-            appSettings.ZoomFactor = factor;
-            ApplyBrowserZoom();
-            SaveSettings();
+            if (activeTab != null)
+            {
+                applyingBrowserZoom = true;
+                try
+                {
+                    foreach (var tab in tabs)
+                        if (tab == activeTab || (site != null && SiteZoomStore.Site(tab.View.Source?.AbsoluteUri ?? tab.Url) == site))
+                        {
+                            tab.ZoomFactor = factor;
+                            tab.View.ZoomFactor = factor;
+                        }
+                }
+                finally { applyingBrowserZoom = false; }
+            }
+            UpdateZoomControls();
+            BrowserZoomChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private double ReadSiteZoom(string url)
+        {
+            try { return SiteZoomStore.Read(url, appSettings.ZoomFactor); }
+            catch (Exception ex) { ReportSiteZoomError(ex); return appSettings.ZoomFactor; }
+        }
+
+        private void ReportSiteZoomError(Exception ex)
+        {
+            (Application.Current as App)?.WriteDiagnostic("Website zoom operation failed", ex);
+            MessageBox.Show(this, $"网站缩放设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        private void ApplyNavigationZoom(Microsoft.Web.WebView2.Wpf.WebView2 view, string url)
+        {
+            var tab = FindTab(view);
+            if (tab == null) return;
+            tab.ZoomFactor = ReadSiteZoom(url);
+            applyingBrowserZoom = true;
+            try { view.ZoomFactor = tab.ZoomFactor; }
+            finally { applyingBrowserZoom = false; }
+            if (tab == activeTab)
+            {
+                currentZoomFactor = tab.ZoomFactor;
+                UpdateZoomControls();
+                BrowserZoomChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         private void UpdateZoomControls()

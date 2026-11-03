@@ -16,6 +16,7 @@ namespace TrayChrome
         {
             public WebView2 View { get; set; }
             public string Url { get; set; }
+            public double ZoomFactor { get; set; }
             public Button Header { get; set; }
             public TextBlock Divider { get; set; }
             public List<HistoryItem> History { get; set; } = new();
@@ -63,7 +64,7 @@ namespace TrayChrome
             applyingBrowserZoom = true;
             try
             {
-                foreach (var tab in tabs) tab.View.ZoomFactor = currentZoomFactor;
+                foreach (var tab in tabs) tab.View.ZoomFactor = tab.ZoomFactor;
             }
             finally { applyingBrowserZoom = false; }
             UpdateZoomControls();
@@ -72,15 +73,12 @@ namespace TrayChrome
 
         private void RegisterTab(WebView2 view, string url)
         {
-            view.ZoomFactor = currentZoomFactor;
+            double zoom = ReadSiteZoom(url);
+            view.ZoomFactor = zoom;
             view.SizeChanged += (_, _) =>
                 Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
-            var tab = new BrowserTab { View = view, Url = url };
-            view.ZoomFactorChanged += (_, _) =>
-            {
-                if (!applyingBrowserZoom && tab == activeTab && view.ZoomFactor != currentZoomFactor)
-                    SetBrowserZoom(Math.Clamp(view.ZoomFactor, 0.3, 3.0));
-            };
+            var tab = new BrowserTab { View = view, Url = url, ZoomFactor = zoom };
+            TrackTabZoom(tab, view);
             view.IsVisibleChanged += (_, _) => RefreshPagePresentation(tab);
             tab.Header = new Button { MaxWidth = 120,
                 Style = (Style)FindResource("TabHeaderStyle"), AllowDrop = true, Tag = tab };
@@ -212,6 +210,14 @@ namespace TrayChrome
             var allowRules = adBlocker.AllowRules;
             activeTab = tab;
             webView = tab.View;
+            if (SiteZoomStore.Site(tab.View.Source?.AbsoluteUri ?? tab.Url) != null)
+                tab.ZoomFactor = ReadSiteZoom(tab.View.Source?.AbsoluteUri ?? tab.Url);
+            currentZoomFactor = tab.ZoomFactor;
+            applyingBrowserZoom = true;
+            try { tab.View.ZoomFactor = tab.ZoomFactor; }
+            finally { applyingBrowserZoom = false; }
+            UpdateZoomControls();
+            BrowserZoomChanged?.Invoke(this, EventArgs.Empty);
             historyList = tab.History;
             historyIndex = tab.HistoryIndex;
             adBlocker = tab.Blocker;
@@ -305,11 +311,12 @@ namespace TrayChrome
                 int index = BrowserHost.Children.IndexOf(failedView);
                 BrowserHost.Children.Remove(failedView);
                 failedView.Dispose();
-                var replacement = new WebView2 { ZoomFactor = currentZoomFactor };
+                var replacement = new WebView2 { ZoomFactor = tab.ZoomFactor };
                 replacement.IsVisibleChanged += (_, _) => RefreshPagePresentation(tab);
                 replacement.SizeChanged += (_, _) =>
                     Dispatcher.BeginInvoke(new Action(ApplyRoundedCorners), System.Windows.Threading.DispatcherPriority.Loaded);
                 tab.View = replacement;
+                TrackTabZoom(tab, replacement);
                 if (tab == activeTab) webView = replacement;
                 BrowserHost.Children.Insert(index, replacement);
                 await WebView2EnvironmentHelper.EnsureCoreWebView2WithFallbackAsync(replacement, appSettings);

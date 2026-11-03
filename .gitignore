@@ -4,3 +4,5 @@ bin/
 publish/
 history.json
 history.json.*.tmp
+site-zoom.json
+site-zoom.json.*.tmp

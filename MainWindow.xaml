@@ -326,7 +326,7 @@
                         Style="{StaticResource ToolbarButtonStyle}" Click="HistoryButton_Click"/>
                 <Button Name="SettingsButton"
                         Style="{StaticResource ToolbarButtonStyle}" Click="SettingsButton_Click"
-                        ToolTip="设置 (Ctrl+,)">
+                        ToolTip="设置 (Ctrl+Shift+,)">
                     <Viewbox Width="14" Height="14">
                         <Grid Width="16" Height="16">
                             <Path Stroke="{Binding Foreground, ElementName=SettingsButton}" StrokeThickness="1.25" StrokeLineJoin="Round"
@@ -355,7 +355,7 @@
                                 <MenuItem Header="代理设置" Click="ProxySettings_Click"/>
                                 <MenuItem Header="重启实例（使代理生效）" Click="RestartApp_Click"/>
                             </MenuItem>
-                            <MenuItem Name="SettingsMenuItem" Header="设置 (Ctrl+,)" Click="SettingsButton_Click"/>
+                            <MenuItem Name="SettingsMenuItem" Header="设置 (Ctrl+Shift+,)" Click="SettingsButton_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

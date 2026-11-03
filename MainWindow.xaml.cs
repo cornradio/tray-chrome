@@ -180,6 +180,11 @@ namespace TrayChrome
             UpdateUIAppearance(isDarkMode);
 
             ApplyToolbarLayout();
+            Activated += (_, _) =>
+            {
+                if (activeTab != null && SiteZoomStore.Site(activeTab.View.Source?.AbsoluteUri ?? activeTab.Url) != null)
+                    ApplyNavigationZoom(activeTab.View, activeTab.View.Source?.AbsoluteUri ?? activeTab.Url);
+            };
             // 应用圆角设置（随窗口尺寸变化重新裁剪）
             MainContentGrid.SizeChanged += (s, e) => ApplyRoundedCorners();
             ApplyRoundedCorners();
@@ -192,9 +197,14 @@ namespace TrayChrome
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.OemComma)
+            {
+                e.Handled = true;
+                (Application.Current as App)?.OpenSettings();
+                return;
+            }
             if (Keyboard.Modifiers == ModifierKeys.Control)
             {
-                if (e.Key == Key.OemComma) { e.Handled = true; (Application.Current as App)?.OpenSettings(); return; }
                 if (e.Key == Key.T) { e.Handled = true; NewTab_Click(this, new RoutedEventArgs()); return; }
                 if (e.Key == Key.W) { e.Handled = true; CloseTab(activeTab); return; }
                 if (e.Key == Key.F) { e.Handled = true; ShowFindBar(); return; }
@@ -328,7 +338,7 @@ namespace TrayChrome
                 // 监听导航事件
                 webView.CoreWebView2.NavigationStarting += (s, e) =>
                 {
-                    view.ZoomFactor = currentZoomFactor;
+                    ApplyNavigationZoom(view, e.Uri);
                     UserScriptNavigationStarting(view, e);
                     if (view == webView) CoreWebView2_NavigationStarting(s, e);
                 };
@@ -1794,7 +1804,6 @@ namespace TrayChrome
             try
             {
                 // 更新设置
-                appSettings.ZoomFactor = currentZoomFactor;
                 appSettings.IsMobileUA = isMobileUA;
                 var normalSize = GetNormalWindowSize();
                 appSettings.WindowWidth = normalSize.Width;
@@ -2368,9 +2377,7 @@ namespace TrayChrome
                 appSettings.WindowWidth = settings.WindowWidth;
                 appSettings.WindowHeight = settings.WindowHeight;
                 // 应用缩放
-                currentZoomFactor = settings.ZoomFactor;
-
-                ApplyBrowserZoom();
+                SetBrowserZoom(settings.ZoomFactor);
                 
                 // 应用UA
                 isMobileUA = settings.IsMobileUA;
