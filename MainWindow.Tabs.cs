@@ -15,6 +15,7 @@ namespace TrayChrome
         private sealed class BrowserTab
         {
             public WebView2 View { get; set; }
+            public string DesktopUserAgent { get; set; }
             public string Url { get; set; }
             public double ZoomFactor { get; set; }
             public Button Header { get; set; }
@@ -54,11 +55,19 @@ namespace TrayChrome
             foreach (var tab in tabs)
             {
                 if (tab.View.CoreWebView2 == null) continue;
-                tab.View.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
+                ApplyTabUserAgent(tab);
                 tab.Blocker.BlockRules = adBlocker.BlockRules;
                 tab.Blocker.AllowRules = adBlocker.AllowRules;
                 tab.Blocker.IsEnabled = adBlocker.IsEnabled;
             }
+        }
+
+        private void ApplyTabUserAgent(BrowserTab tab)
+        {
+            var settings = tab.View.CoreWebView2.Settings;
+            tab.DesktopUserAgent ??= settings.UserAgent;
+            string userAgent = isMobileUA ? MobileUA : tab.DesktopUserAgent;
+            if (settings.UserAgent != userAgent) settings.UserAgent = userAgent;
         }
 
         private void ApplyBrowserZoom()
@@ -236,7 +245,7 @@ namespace TrayChrome
             UpdateTabTheme(isDarkMode);
             if (webView.CoreWebView2 != null)
             {
-                webView.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
+                ApplyTabUserAgent(tab);
                 UpdateTrayTooltip();
                 UpdateBrowserDrag();
                 webView.Focus();

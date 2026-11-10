@@ -149,7 +149,7 @@ namespace TrayChrome
                     return string.Join("; ", cookies.Select(cookie => $"{cookie.Name}={cookie.Value}"));
                 },
                 Log = message => (Application.Current as App)?.WriteDiagnostic(message),
-                UserAgent = view.CoreWebView2?.Settings.UserAgent ?? DesktopUA
+                UserAgent = view.CoreWebView2?.Settings.UserAgent ?? tab.DesktopUserAgent
             };
             return userScripts.TryHandleMessage(json, args.Source, host);
         }

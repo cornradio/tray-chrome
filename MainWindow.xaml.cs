@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -69,7 +68,6 @@ namespace TrayChrome
         private bool isBookmarkPanelVisible = false;
         private bool isMobileUA = true;
         private const string MobileUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
-        private const string DesktopUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
         private double currentZoomFactor = 0.8;
         private AppSettings appSettings = new AppSettings();
         private bool isResizing = false;
@@ -325,7 +323,7 @@ namespace TrayChrome
                 var settings = webView.CoreWebView2.Settings;
                 
                 // 设置用户代理
-                settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
+                ApplyTabUserAgent(tabs.Single(tab => tab.View == view));
                 
                 // 启用开发者工具
                 settings.AreDevToolsEnabled = true;
@@ -346,7 +344,6 @@ namespace TrayChrome
                 {
                     ApplyNavigationZoom(view, e.Uri);
                     UserScriptNavigationStarting(view, e);
-                    if (view == webView) CoreWebView2_NavigationStarting(s, e);
                 };
                 webView.CoreWebView2.NavigationCompleted += async (s, e) =>
                 {
@@ -531,29 +528,6 @@ namespace TrayChrome
             }
         }
 
-        private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
-        {
-            // 在页面导航开始前清理前一个页面的资源
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    // 立即清理前一个页面的资源
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        CleanupWebViewMemory();
-                    });
-                    
-                    // 短暂延迟确保清理完成
-                    await Task.Delay(500);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"导航前清理异常: {ex.Message}");
-                }
-            });
-        }
-
         private void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             Dispatcher.Invoke(() =>
@@ -570,27 +544,6 @@ namespace TrayChrome
                 
                 // 更新托盘图标提示
                 UpdateTrayTooltip();
-                
-                // 页面导航完成后清理内存
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        // 等待页面完全加载
-                        await Task.Delay(2000);
-                        
-                        // 在UI线程中执行内存清理
-                        await Dispatcher.InvokeAsync(() =>
-                        {
-                            CleanupWebViewMemory();
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        // 忽略清理过程中的异常
-                        System.Diagnostics.Debug.WriteLine($"内存清理异常: {ex.Message}");
-                    }
-                });
             });
         }
         
@@ -1894,15 +1847,8 @@ namespace TrayChrome
             if (webView.CoreWebView2 != null)
             {
                 isMobileUA = !isMobileUA;
-                
-                if (isMobileUA)
-                {
-                    webView.CoreWebView2.Settings.UserAgent = MobileUA;
-                }
-                else
-                {
-                    webView.CoreWebView2.Settings.UserAgent = DesktopUA;
-                }
+                foreach (var tab in tabs)
+                    if (tab.View.CoreWebView2 != null) ApplyTabUserAgent(tab);
                 
                 // 刷新当前页面以应用新的用户代理
                 UpdateToolbarIcons();
@@ -2160,57 +2106,14 @@ namespace TrayChrome
             {
                 if (webView?.CoreWebView2 != null)
                 {
-                    // 清理浏览器缓存和内存
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            // 1. 清理所有类型的浏览数据
-                            await webView.CoreWebView2.Profile.ClearBrowsingDataAsync(
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.AllDomStorage |
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.AllSite |
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DiskCache |
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.Cookies |
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.BrowsingHistory |
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DownloadHistory |
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.GeneralAutofill |
-                                Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.PasswordAutosave
-                            );
-                            
-                            // 2. 尝试设置内存使用目标为低
-                            try
-                            {
-                                webView.CoreWebView2.MemoryUsageTargetLevel = 
-                                    Microsoft.Web.WebView2.Core.CoreWebView2MemoryUsageTargetLevel.Low;
-                            }
-                            catch (Exception memEx)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"设置内存目标异常: {memEx.Message}");
-                            }
-                            
-                            // 3. 强制垃圾回收（多次执行确保彻底清理）
-                            for (int i = 0; i < 3; i++)
-                            {
-                                GC.Collect();
-                                GC.WaitForPendingFinalizers();
-                                await Task.Delay(100); // 短暂延迟让系统处理
-                            }
-                            
-                            // 4. 尝试压缩大对象堆
-                            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                            GC.Collect();
-                            
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"清理缓存异常: {ex.Message}");
-                        }
-                    });
+                    // 内存回收不能删除登录 Cookie、网站存储或重建正在使用的浏览器。
+                    webView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
                 }
+                GC.Collect(0, GCCollectionMode.Optimized);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"内存清理异常: {ex.Message}");
+                (Application.Current as App)?.WriteDiagnostic("Browser memory cleanup failed", ex);
             }
         }
         
@@ -2218,7 +2121,6 @@ namespace TrayChrome
         
         private void StartMemoryCleanupTimer()
         {
-            // 创建定时器，每2分钟清理一次内存（更频繁的清理）
             memoryCleanupTimer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromMinutes(2)
@@ -2226,41 +2128,18 @@ namespace TrayChrome
             
             memoryCleanupTimer.Tick += (sender, e) =>
             {
-                // 智能清理策略：根据内存使用情况决定清理强度
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
-                    {
-                        // 获取当前进程内存使用情况
-                        var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                        var memoryUsage = currentProcess.WorkingSet64 / (1024 * 1024); // MB
-                        
-                        System.Diagnostics.Debug.WriteLine($"当前内存使用: {memoryUsage}MB");
-                        
-                        // 如果内存使用超过200MB，执行强力清理
-                        if (memoryUsage > 200)
-                        {
-                            System.Diagnostics.Debug.WriteLine("执行强力内存清理");
-                            await Dispatcher.InvokeAsync(() => CleanupWebViewMemory());
-                            
-                            // 如果内存使用超过400MB，考虑重置WebView环境
-                            if (memoryUsage > 400)
-                            {
-                                System.Diagnostics.Debug.WriteLine("内存使用过高，考虑重置WebView环境");
-                                await Dispatcher.InvokeAsync(async () => await ResetWebViewEnvironment());
-                            }
-                        }
-                        else
-                        {
-                            // 轻量级清理
-                            GC.Collect(0, GCCollectionMode.Optimized);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"智能清理异常: {ex.Message}");
-                    }
-                });
+                    using var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                    if (currentProcess.WorkingSet64 > 200L * 1024 * 1024)
+                        CleanupWebViewMemory();
+                    else
+                        GC.Collect(0, GCCollectionMode.Optimized);
+                }
+                catch (Exception ex)
+                {
+                    (Application.Current as App)?.WriteDiagnostic("Scheduled browser memory cleanup failed", ex);
+                }
             };
             
             memoryCleanupTimer.Start();
@@ -2320,6 +2199,7 @@ namespace TrayChrome
                     // 6. 创建新实例并放回原位
                     webView = new Microsoft.Web.WebView2.Wpf.WebView2();
                     activeTab.View = webView;
+                    activeTab.DesktopUserAgent = null;
                     var replacementTab = activeTab;
                     webView.IsVisibleChanged += (_, _) => RefreshPagePresentation(replacementTab);
                     webView.Name = "webView";
@@ -2389,7 +2269,7 @@ namespace TrayChrome
                 isMobileUA = settings.IsMobileUA;
                 if (webView?.CoreWebView2 != null)
                 {
-                    webView.CoreWebView2.Settings.UserAgent = isMobileUA ? MobileUA : DesktopUA;
+                    ApplyTabUserAgent(activeTab);
                 }
                 
                 // 应用暗色模式
