@@ -265,6 +265,7 @@
                                 <TextBlock TextWrapping="Wrap" Margin="5">
                                     <Run Text="以下是在 TrayChrome 中可用的快捷键：" FontWeight="Bold"/>
                                     <LineBreak/>
+                                    <Run Text="• Ctrl + Shift + T：恢复刚关闭的标签页"/><LineBreak/>
                                     <Run Text="• Ctrl + Shift + ,：打开设置"/>
                                     <LineBreak/><LineBreak/>
                                     <Run Text="• 中键(托盘图标)：" FontWeight="Bold"/>

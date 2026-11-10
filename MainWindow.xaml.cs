@@ -197,6 +197,12 @@ namespace TrayChrome
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.T)
+            {
+                e.Handled = true;
+                if (!e.IsRepeat) RestoreClosedTab_Click(this, new RoutedEventArgs());
+                return;
+            }
             if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.OemComma)
             {
                 e.Handled = true;

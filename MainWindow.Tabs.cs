@@ -36,6 +36,8 @@ namespace TrayChrome
         }
 
         private readonly List<BrowserTab> tabs = new();
+        private readonly Stack<string> closedTabUrls = new();
+        private bool restoringClosedTab;
         private BrowserTab activeTab;
         private bool tabInitializing;
         private BrowserTab tabDragCandidate;
@@ -298,6 +300,25 @@ namespace TrayChrome
 
         private async void NewTab_Click(object sender, RoutedEventArgs e) => await OpenTabAsync(focusAddressBar: true);
 
+        private async void RestoreClosedTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (restoringClosedTab || tabInitializing || closedTabUrls.Count == 0) return;
+            restoringClosedTab = true;
+            try
+            {
+                string url = closedTabUrls.Peek();
+                int count = tabs.Count;
+                await OpenTabAsync(url);
+                if (tabs.Count > count) closedTabUrls.Pop();
+            }
+            catch (Exception ex)
+            {
+                (Application.Current as App)?.WriteDiagnostic("Restoring closed tab failed", ex);
+                MessageBox.Show($"恢复关闭的标签页失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally { restoringClosedTab = false; }
+        }
+
         private async Task InitializeTabBrowserAsync(BrowserTab tab)
         {
             try
@@ -348,9 +369,11 @@ namespace TrayChrome
             await browserInputLock.WaitAsync();
             try
             {
-                if (tabInitializing || !tabs.Contains(tab)) return;
+                if (tabInitializing || restoringClosedTab || !tabs.Contains(tab)) return;
                 if (tabs.Count == 1) { HideWithAnimation(); return; }
+                string url = tab.View.CoreWebView2?.Source ?? tab.Url;
                 RemoveTab(tab);
+                closedTabUrls.Push(url);
             }
             catch (Exception ex)
             {
